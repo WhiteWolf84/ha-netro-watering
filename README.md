@@ -1,4 +1,3 @@
-
 # Netro Smart Garden Integration for Home Assistant
 
 
@@ -16,6 +15,7 @@
 - [🌦️ Netro Weather Sync Blueprint](#🌦️-netro-weather-sync-blueprint)
 - [🖼️ Lovelace cards](#🖼️-lovelace-cards)
 - [🛠️ Advanced configuration](#🛠️-advanced-configuration)
+- [☕ Support](#support)
 
 ## ℹ️ About
 Home Assistant integration for Netro Smart Garden devices. It lets you manage Netro controllers and soil sensors to monitor conditions, control zones, and automate watering from Home Assistant.
@@ -251,3 +251,9 @@ netro_watering:
       to:   '17:00'
       sdf:  5        # e.g., base 2 min -> 10 min in this window
 ```
+
+## ☕ Support
+
+If you like this project, you can [buy me a coffee](https://www.buymeacoffee.com/kcofoni) !
+
+[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy+me+a+coffee&emoji=&slug=kcofoni&button_colour=FFDD00&font_colour=000000&font_family=Inter&outline_colour=000000&coffee_colour=ffffff)](https://www.buymeacoffee.com/kcofoni)
