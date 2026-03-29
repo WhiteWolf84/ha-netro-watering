@@ -82,8 +82,8 @@ async def async_get_config_entry_diagnostics(
     This report intentionally avoids secrets and masks any discovered serial numbers,
     including those embedded in identifiers/unique_ids.
     """
-    # Coordinator is stored directly under hass.data[DOMAIN][entry.entry_id]
-    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    # Coordinator is stored in entry.runtime_data (previously hass.data[DOMAIN][entry.entry_id])
+    coordinator = getattr(entry, "runtime_data", None)
 
     # --- Collect serial numbers to scrub later (wherever they appear as substrings) ---
     serial_secrets: set[str] = set()

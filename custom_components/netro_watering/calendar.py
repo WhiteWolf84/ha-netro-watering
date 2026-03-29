@@ -19,6 +19,8 @@ from .coordinator import NetroControllerUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 1
+
 NETRO_CALENDAR_DESCRIPTION = EntityDescription(
     key="schedules",
     name="Schedules",
@@ -40,7 +42,7 @@ async def async_setup_entry(
         async_add_entities(
             [
                 NetroCalendar(
-                    hass.data[DOMAIN][config_entry.entry_id],
+                    config_entry.runtime_data,
                     NETRO_CALENDAR_DESCRIPTION,
                 )
             ]

@@ -84,9 +84,11 @@ sequence:
         {{ state_attr(weather_entity_id,'humidity') }}
       rain_prob: >
         {% if rain_prob_entity != "" %}
-          {{ states(rain_prob_entity) | int }}
+          {{ states(rain_prob_entity) | int(0) }}
+        {% elif myforecasts[weather_entity_id]['forecast'][0].precipitation_probability is defined %}
+          {{ myforecasts[weather_entity_id]['forecast'][0].precipitation_probability | int(0) }}
         {% else %}
-          {{ myforecasts[weather_entity_id]['forecast'][0].get('humidity', 50) }}
+          {{ state_attr(weather_entity_id, 'humidity') | default(50) | int }}
         {% endif %}
       temp: >
         {{ state_attr(weather_entity_id, 'temperature') }}
@@ -115,7 +117,7 @@ sequence:
               {% set current_condition = myforecasts[weather_entity_id]['forecast'][repeat.index].condition %}
               {{ mapped_conditions.get(current_condition, 'clear') }}
             rain: >
-              {% if 'precipitation' in myforecasts[weather_entity_id]['forecast'][repeat.index] %}
+              {% if myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation is defined %}
                 {{ myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation }}
               {% else %}
                 0
@@ -124,6 +126,12 @@ sequence:
               {{ myforecasts[weather_entity_id]['forecast'][repeat.index].templow }}
             t_max: >
               {{ myforecasts[weather_entity_id]['forecast'][repeat.index].temperature }}
+            rain_prob: >
+              {% if myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation_probability is defined %}
+                {{ myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation_probability | int(0) }}
+              {% else %}
+                50
+              {% endif %}
 
 mode: single
 icon: mdi:cloud-arrow-down-outline

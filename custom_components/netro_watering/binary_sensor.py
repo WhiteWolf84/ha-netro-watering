@@ -29,6 +29,8 @@ from .coordinator import NetroControllerUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 1
+
 
 @dataclass
 class NetroRequiredKeysMixin:
@@ -67,9 +69,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up entry for a Netro sensors."""
     if config_entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
-        controller: NetroControllerUpdateCoordinator = hass.data[DOMAIN][
-            config_entry.entry_id
-        ]
+        controller: NetroControllerUpdateCoordinator = config_entry.runtime_data
 
         _LOGGER.info("Adding binary sensor entities for zones")
         _LOGGER.debug(
