@@ -353,10 +353,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> boo
     # access to global parameters
     gp = hass.data.get(DOMAIN, {}).get(GLOBAL_PARAMETERS, {})
 
-    # get global parameters any type of device could be interested in
+    # get parameters any type of device could be interested in
+    import copy
+    slowdown_factors_raw = entry.options.get(
+        CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS)
+    )
     slowdown_factors = None
-    if gp.get(CONF_SLOWDOWN_FACTORS) is not None:
-        slowdown_factors = gp[CONF_SLOWDOWN_FACTORS]
+    if slowdown_factors_raw:
+        slowdown_factors = copy.deepcopy(slowdown_factors_raw)
+        prepare_slowdown_factors(slowdown_factors)
+
 
     if entry.data[CONF_DEVICE_TYPE] == SENSOR_DEVICE_TYPE:
         # get sensor specific parameters, look first in the options,

@@ -31,6 +31,7 @@ from .const import (
     CONF_SENS_REFRESH_INTERVAL,
     CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
     CONF_SERIAL_NUMBER,
+    CONF_SLOWDOWN_FACTORS,
     CONTROLLER_ADVANCED_OPTIONS_COLLAPSED,
     CONTROLLER_DEVICE_TYPE,
     CTRL_REFRESH_INTERVAL_MN,
@@ -318,6 +319,13 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                             mode=selector.NumberSelectorMode.BOX,
                         )
                     ),
+                    vol.Optional(
+                        CONF_SLOWDOWN_FACTORS,
+                        default=self.config_entry.options.get(
+                            CONF_SLOWDOWN_FACTORS,
+                            gp.get(CONF_SLOWDOWN_FACTORS, [])
+                        ),
+                    ): selector.ObjectSelector(),
                 }
             )
             schema = vol.Schema(
