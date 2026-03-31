@@ -153,14 +153,20 @@
               "delay_before_refresh": "Time to wait before data refresh (seconds",
               "months_after_schedules": "Months after today to get schedules",
               "months_before_schedules": "Months before today to get schedules",
-              "sensor_value_days_before_today": "Days ago to fetch sensor value"
+              "sensor_value_days_before_today": "Days ago to fetch sensor value",
+              "slowdown_start_time": "Slowdown start time",
+              "slowdown_end_time": "Slowdown end time",
+              "slowdown_multiplier": "Slowdown factor multiplier"
             },
             "data_description": {
               "default_watering_delay": "User-defined delay before irrigation starts",
               "delay_before_refresh": "Waiting time before fetching status feedback from the cloud after an action (e.g., start watering)",
               "months_after_schedules": "Number of months ahead to include in the schedules",
               "months_before_schedules": "Number of months in the past to include in the schedules",
-              "sensor_value_days_before_today": "Use data from previous days if the soil sensor is not updated daily"
+              "sensor_value_days_before_today": "Use data from previous days if the soil sensor is not updated daily",
+              "slowdown_start_time": "Time when the data refresh rate should be slowed down",
+              "slowdown_end_time": "Time when the data refresh rate should resume as normal",
+              "slowdown_multiplier": "How many times slower the data refresh should be (e.g. 4 means refreshing 4 times slower)"
             },
             "description": "Consult the documentation before changing these options.",
             "name": "Advanced options"

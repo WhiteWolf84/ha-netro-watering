@@ -127,6 +127,10 @@ CONF_MONTHS_BEFORE_SCHEDULES = "months_before_schedules"
 CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY = "sensor_value_days_before_today"
 CONF_SENS_REFRESH_INTERVAL = "sensor_refresh_interval"
 CONF_SLOWDOWN_FACTORS = "slowdown_factors"
+CONF_SLOWDOWN_START_TIME = "slowdown_start_time"
+CONF_SLOWDOWN_END_TIME = "slowdown_end_time"
+CONF_SLOWDOWN_MULTIPLIER = "slowdown_multiplier"
+
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_MOISTURE = "moisture"

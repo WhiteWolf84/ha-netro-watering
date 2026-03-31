@@ -1,0 +1,303 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Dispositivo già configurato"
+        },
+        "error": {
+            "cannot_connect": "Impossibile connettersi al dispositivo",
+            "invalid_serial_number": "Numero di serie non valido",
+            "netro_error_occurred": "Netro ha restituito un errore per questo numero di serie",
+            "unknown": "Errore inatteso",
+            "unknown_device_type": "Tipo di dispositivo sconosciuto"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "device_name": "Nome dispositivo",
+                    "device_type": "Tipo dispositivo",
+                    "serial_number": "Numero di serie del dispositivo"
+                },
+                "data_description": {
+                    "device_name": "Un nome opzionale per il tuo dispositivo",
+                    "device_type": "Il tipo di dispositivo (es. 'Controller Irrigazione', 'Sensore Suolo')",
+                    "serial_number": "Puoi trovare il numero di serie sul dispositivo o nell'app Netro"
+                },
+                "description": "Inserisci il numero di serie del tuo dispositivo",
+                "title": "Configura Netro"
+            }
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "iswatering": {
+                "name": "Sta irrigando?",
+                "state": {
+                    "off": "Spento",
+                    "on": "Acceso"
+                }
+            }
+        },
+        "button": {
+            "refresh": {
+                "name": "Aggiorna"
+            }
+        },
+        "calendar": {
+            "schedules": {
+                "name": "Irrigazione"
+            }
+        },
+        "sensor": {
+            "battery_percent": {
+                "name": "Batteria"
+            },
+            "humidity": {
+                "name": "Umidità"
+            },
+            "illuminance": {
+                "name": "Luminosità"
+            },
+            "last_watering_end_datetime": {
+                "name": "Fine ultima irrigazione"
+            },
+            "last_watering_source": {
+                "name": "Sorgente ultima irrigazione",
+                "state": {
+                    "fix": "Programmata",
+                    "manual": "Manuale",
+                    "none": "Sconosciuta",
+                    "smart": "Smart"
+                }
+            },
+            "last_watering_start_datetime": {
+                "name": "Inizio ultima irrigazione"
+            },
+            "last_watering_status": {
+                "name": "Stato ultima irrigazione",
+                "state": {
+                    "executed": "Eseguita",
+                    "executing": "In esecuzione",
+                    "none": "Sconosciuto",
+                    "valid": "Pianificata"
+                }
+            },
+            "next_watering_end_datetime": {
+                "name": "Fine prossima irrigazione"
+            },
+            "next_watering_source": {
+                "name": "Sorgente prossima irrigazione",
+                "state": {
+                    "fix": "Programmata",
+                    "manual": "Manuale",
+                    "none": "Sconosciuto",
+                    "smart": "Smart"
+                }
+            },
+            "next_watering_start_datetime": {
+                "name": "Inizio prossima irrigazione"
+            },
+            "next_watering_status": {
+                "name": "Stato prossima irrigazione",
+                "state": {
+                    "executed": "Eseguita",
+                    "executing": "In esecuzione",
+                    "none": "Sconosciuto",
+                    "valid": "Pianificata"
+                }
+            },
+            "status": {
+                "name": "Stato",
+                "state": {
+                    "offline": "Offline",
+                    "online": "Online",
+                    "poweroff": "Spento",
+                    "setup": "Configurazione",
+                    "sleeping": "Riposo",
+                    "standby": "Standby",
+                    "watering": "Irrigazione"
+                }
+            },
+            "temperature": {
+                "name": "Temperatura"
+            },
+            "token_remaining": {
+                "name": "Token rimanenti"
+            }
+        },
+        "switch": {
+            "enabled": {
+                "name": "Abilita/Disabilita"
+            },
+            "watering": {
+                "name": "Avvia/Ferma irrigazione"
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "controller_refresh_interval": "Intervallo aggiornamento controller (in minuti)",
+                    "sensor_refresh_interval": "Intervallo aggiornamento sensore (in minuti)",
+                    "watering_duration": "Durata irrigazione predefinita (in minuti)"
+                },
+                "data_description": {
+                    "controller_refresh_interval": "Intervallo per aggiornare i dati del controller e delle zone dal cloud",
+                    "sensor_refresh_interval": "Intervallo per aggiornare i dati del sensore dal cloud",
+                    "watering_duration": "Durata predefinita suggerita per l'avvio manuale dell'irrigazione"
+                },
+                "sections": {
+                    "advanced": {
+                        "name": "Opzioni avanzate",
+                        "description": "Consulta la documentazione prima di modificare queste opzioni.",
+                        "data": {
+                            "default_watering_delay": "Ritardo prima dell'avvio irrigazione (secondi)",
+                            "delay_before_refresh": "Tempo di attesa prima del refresh dati (secondi)",
+                            "months_after_schedules": "Mesi successivi a oggi per programmazioni",
+                            "months_before_schedules": "Mesi passati per ottenere le programmazioni storiche",
+                            "sensor_value_days_before_today": "Giorni passati per recupero dati sensore",
+                            "slowdown_start_time": "Orario inizio rallentamento",
+                            "slowdown_end_time": "Orario fine rallentamento",
+                            "slowdown_multiplier": "Moltiplicatore rallentamento"
+                        },
+                        "data_description": {
+                            "default_watering_delay": "Ritardo definito dall'utente prima che l'irrigazione inizi",
+                            "delay_before_refresh": "Tempo di attesa prima di chiedere lo stato al cloud (es. dopo l'avvio di un'irrigazione)",
+                            "months_after_schedules": "Numero di mesi futuri da includere nelle programmazioni",
+                            "months_before_schedules": "Numero di mesi passati da includere nelle programmazioni",
+                            "sensor_value_days_before_today": "Usa dati dei giorni precedenti se il sensore del suolo non è aggiornato quotidianamente",
+                            "slowdown_start_time": "Momento in cui la frequenza di aggiornamento dati dovrebbe rallentare",
+                            "slowdown_end_time": "Momento in cui la frequenza di aggiornamento dovrebbe tornare normale",
+                            "slowdown_multiplier": "Quante volte più lento deve essere il refresh (es. 4 significa refresh 4 volte più lento)"
+                        }
+                    }
+                },
+                "title": "Opzioni Netro Watering"
+            }
+        }
+    },
+    "services": {
+        "disable": {
+            "description": "Disabilita il controller selezionato",
+            "name": "Disabilita"
+        },
+        "enable": {
+            "description": "Abilita il controller selezionato",
+            "name": "Abilita"
+        },
+        "no_water": {
+            "description": "Sospende l'irrigazione per un tot di giorni sul controller specificato",
+            "fields": {
+                "config_entry_id": {
+                    "description": "L'entità config del controller da impostare in modalità nessuna irrigazione",
+                    "name": "Entità config"
+                },
+                "days": {
+                    "description": "Numero di giorni consecutivi senza irrigazione",
+                    "name": "Giorni"
+                }
+            },
+            "name": "Nessuna irrigazione"
+        },
+        "refresh_data": {
+            "description": "Aggiorna i dati Netro (controller, zone, sensori) dal cloud",
+            "fields": {
+                "config_entry_id": {
+                    "description": "L'entità config i cui dispositivi verranno aggiornati",
+                    "name": "Entità di configurazione"
+                }
+            },
+            "name": "Aggiorna dati"
+        },
+        "report_weather": {
+            "description": "Ripota i dati atmosferici al sistema sovrascrivendo i dati meteo di base",
+            "fields": {
+                "condition": {
+                    "description": "Condizione meteorologica",
+                    "name": "Condizione"
+                },
+                "config_entry_id": {
+                    "description": "Entità config a cui mandare il report",
+                    "name": "Entità config"
+                },
+                "date": {
+                    "description": "Data meteo (non può essere precedente a ieri)",
+                    "name": "Data"
+                },
+                "humidity": {
+                    "description": "Umidità nell'intervallo [0,100]",
+                    "name": "Umidità"
+                },
+                "pressure": {
+                    "description": "Pressione in hPa",
+                    "name": "Pressione"
+                },
+                "rain": {
+                    "description": "Ammontare caduta pioggia in mm",
+                    "name": "Pioggia"
+                },
+                "rain_prob": {
+                    "description": "Probabilità di pioggia nell'intervallo [0,100]",
+                    "name": "Probabilità di pioggia"
+                },
+                "t_dew": {
+                    "description": "Temperatura di rugiada (Celsius)",
+                    "name": "Temperatura rugiada"
+                },
+                "t_max": {
+                    "description": "Temperatura massima (Celsius)",
+                    "name": "Temperatura massima"
+                },
+                "t_min": {
+                    "description": "Temperatura minima (Celsius)",
+                    "name": "Temperatura minima"
+                },
+                "temp": {
+                    "description": "Temperatura media (Celsius)",
+                    "name": "Temperatura"
+                },
+                "wind_speed": {
+                    "description": "Velocità vento in m/s",
+                    "name": "Velocità vento"
+                }
+            },
+            "name": "Riporta dati meteo"
+        },
+        "set_moisture": {
+            "description": "Imposta il valore dell'umidità per una specifica zona, ottimo per fornire l'umidità di un sensore esterno",
+            "fields": {
+                "moisture": {
+                    "description": "Umidità da impostare per la zona (in %)",
+                    "name": "Umidità"
+                },
+                "zone_id": {
+                    "description": "Id della zona in cui impostare l'umidità",
+                    "name": "Zona"
+                }
+            },
+            "name": "Imposta umidità"
+        },
+        "start_watering": {
+            "description": "Avvia l'irrigazione per una durata specificata, con eventuale ritardo iniziale o tempo d'inizio fisso",
+            "fields": {
+                "delay": {
+                    "description": "Tempo di attesa prima dell'avvio temporizzato",
+                    "name": "Ritardo"
+                },
+                "duration": {
+                    "description": "Durata di accensione per questo irrigatore",
+                    "name": "Durata"
+                },
+                "start_time": {
+                    "description": "Data ed orario per avvio irrigazione",
+                    "name": "Orario d'inizio"
+                }
+            },
+            "name": "Inizia irrigazione"
+        },
+        "stop_watering": {
+            "description": "Ferma contemporaneamente tutte le irrigazioni in corso",
+            "name": "Ferma irrigazione"
+        }
+    }
+}

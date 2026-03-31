@@ -51,6 +51,9 @@ from .const import (
     CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
     CONF_SERIAL_NUMBER,
     CONF_SLOWDOWN_FACTORS,
+    CONF_SLOWDOWN_START_TIME,
+    CONF_SLOWDOWN_END_TIME,
+    CONF_SLOWDOWN_MULTIPLIER,
     CONTROLLER_DEVICE_TYPE,
     CTRL_REFRESH_INTERVAL_MN,
     DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
@@ -355,12 +358,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> boo
 
     # get parameters any type of device could be interested in
     import copy
-    slowdown_factors_raw = entry.options.get(
-        CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS)
-    )
+    
+    old_sd_factors = entry.options.get(CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS, []))
+    default_sd_start = "22:00"
+    default_sd_end = "06:00"
+    default_sd_mult = 1
+    
+    if isinstance(old_sd_factors, list) and len(old_sd_factors) > 0:
+        first_sd = old_sd_factors[0]
+        default_sd_start = first_sd.get("from", default_sd_start)
+        default_sd_end = first_sd.get("to", default_sd_end)
+        default_sd_mult = first_sd.get("sdf", default_sd_mult)
+        
+    sd_start = entry.options.get(CONF_SLOWDOWN_START_TIME, default_sd_start)
+    sd_end = entry.options.get(CONF_SLOWDOWN_END_TIME, default_sd_end)
+    sd_mult = entry.options.get(CONF_SLOWDOWN_MULTIPLIER, default_sd_mult)
+
     slowdown_factors = None
-    if slowdown_factors_raw:
-        slowdown_factors = copy.deepcopy(slowdown_factors_raw)
+    if sd_mult > 1 and sd_start and sd_end:
+        slowdown_factors = [{"from": sd_start, "to": sd_end, "sdf": sd_mult}]
         prepare_slowdown_factors(slowdown_factors)
 
 
