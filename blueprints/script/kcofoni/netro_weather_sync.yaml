@@ -109,10 +109,18 @@ sequence:
         {% set current_condition = states(weather_entity_id) %}
         {{ mapped_conditions.get(current_condition, 'clear') }}
       rain: >
+        {% set forecast_rain = myforecasts[weather_entity_id]['forecast'][0].precipitation | default(0) | float(0) %}
         {% if rain_today_entity != "" %}
-          {{ states(rain_today_entity) | float(0) }}
+          {% set sensor_rain = states(rain_today_entity) | float(0) %}
+          {% if sensor_rain > forecast_rain %}
+            {{ sensor_rain }}
+          {% elif now().hour >= 20 %}
+            {{ sensor_rain }}
+          {% else %}
+            {{ forecast_rain }}
+          {% endif %}
         {% else %}
-          {{ myforecasts[weather_entity_id]['forecast'][0].precipitation | default(0) }}
+          {{ forecast_rain }}
         {% endif %}
       t_min: >
         {% if temp_min_entity != "" %}
