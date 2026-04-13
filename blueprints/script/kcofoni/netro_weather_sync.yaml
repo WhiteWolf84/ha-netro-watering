@@ -76,7 +76,7 @@ fields:
     name: Number of Forecast Days
     description: Number of forecast days to synchronize (in addition to today)
     required: true
-    default: 3
+    default: 4
     selector:
       number:
         min: 0
@@ -145,7 +145,7 @@ sequence:
         
   - alias: "Sync forecast days"
     repeat:
-      count: "{{ number_of_days_forecast }}"
+      count: "{{ [number_of_days_forecast, myforecasts[weather_entity_id]['forecast'] | length - 1] | min }}"
       sequence:
         - action: netro_watering.report_weather
           data:
