@@ -150,6 +150,8 @@ sequence:
         {{ (state_attr(weather_entity_id, 'wind_speed') | float / 3.6) | round(1) }}
       pressure: >
         {{ state_attr(weather_entity_id, 'pressure') }}
+      t_dew: >
+        {{ state_attr(weather_entity_id, 'dew_point') }}
         
   - alias: "Sync forecast days"
     repeat:
