@@ -161,7 +161,19 @@ sequence:
           {{ state_attr(weather_entity_id, 'humidity') | default(50) | int }}
         {% endif %}
       temp: >
-        {{ state_attr(weather_entity_id, 'temperature') }}
+        {% set forecast_min = myforecasts[weather_entity_id]['forecast'][0].templow | float(0) %}
+        {% set final_min = forecast_min %}
+        {% if temp_min_entity != "" %}
+          {% set sensor_min = states(temp_min_entity) | float(0) %}
+          {% set final_min = sensor_min if (sensor_min < forecast_min or now().hour >= 10) else forecast_min %}
+        {% endif %}
+        {% set forecast_max = myforecasts[weather_entity_id]['forecast'][0].temperature | float(0) %}
+        {% set final_max = forecast_max %}
+        {% if temp_max_entity != "" %}
+          {% set sensor_max = states(temp_max_entity) | float(0) %}
+          {% set final_max = sensor_max if (sensor_max > forecast_max or now().hour >= 20) else forecast_max %}
+        {% endif %}
+        {{ ((final_min + final_max) / 2) | round(1) }}
       wind_speed: >
         {{ (state_attr(weather_entity_id, 'wind_speed') | float / 3.6) | round(1) }}
       pressure: >
