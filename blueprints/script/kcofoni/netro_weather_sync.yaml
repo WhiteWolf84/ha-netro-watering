@@ -4,6 +4,7 @@ blueprint:
     Synchronizes weather data from a weather entity to a Netro controller.
     This script retrieves daily weather forecasts and transmits them to the controller
     to optimize watering schedules.
+    For today, real-time station sensors (if configured) override ARPAE forecasts.
   
   source_url: https://github.com/kcofoni/ha-netro-watering/blob/main/blueprints/script/kcofoni/netro_weather_sync.yaml
   
@@ -19,7 +20,7 @@ blueprint:
           
     weather_entity:
       name: Weather Entity
-      description: Select the source weather entity (e.g. weather.paris)
+      description: Select the source weather entity (e.g. weather.stazione_meteocarpi)
       selector:
         entity:
           domain: weather
@@ -32,9 +33,42 @@ blueprint:
         entity:
           domain: sensor
 
+    rain_today_entity:
+      name: Daily Rain Sensor (Optional)
+      description: >
+        Sensor for actual rainfall today in mm (e.g. sensor.pioggia_giornaliera).
+        Overrides forecast precipitation for today's report.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    temp_min_entity:
+      name: Daily Min Temperature Sensor (Optional)
+      description: >
+        Sensor for today's measured minimum temperature (e.g. sensor.temperatura_min_giornaliera).
+        Overrides forecast templow for today's report.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    temp_max_entity:
+      name: Daily Max Temperature Sensor (Optional)
+      description: >
+        Sensor for today's measured maximum temperature (e.g. sensor.temperatura_max_giornaliera).
+        Overrides forecast temperature for today's report.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
 variables:
   weather_entity_id: !input weather_entity
   rain_prob_entity: !input rain_probability_entity
+  rain_today_entity: !input rain_today_entity
+  temp_min_entity: !input temp_min_entity
+  temp_max_entity: !input temp_max_entity
   config_entry_controller: !input netro_controller
 
 fields:
@@ -42,7 +76,7 @@ fields:
     name: Number of Forecast Days
     description: Number of forecast days to synchronize (in addition to today)
     required: true
-    default: 3
+    default: 4
     selector:
       number:
         min: 0
@@ -58,12 +92,12 @@ sequence:
       type: daily
     response_variable: myforecasts
     
-  - alias: "Sync today's weather"
+  - alias: "Sync today's weather (station data overrides forecasts)"
     action: netro_watering.report_weather
     data:
       config_entry_id: "{{ config_entry_controller }}"
       date: >
-        {{ as_timestamp(myforecasts[weather_entity_id]['forecast'][0].datetime, now()) | timestamp_custom("%Y-%m-%d") }}
+        {{ now().strftime("%Y-%m-%d") }}
       condition: >
         {% set mapped_conditions = {
           'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'clear',
@@ -72,32 +106,84 @@ sequence:
           'rainy': 'rain', 'snowy': 'snow', 'snowy-rainy': 'snow',
           'sunny': 'clear', 'windy': 'wind', 'windy-variant': 'wind'
         } %}
-        {% set current_condition = myforecasts[weather_entity_id]['forecast'][0].condition %}
+        {% set current_condition = states(weather_entity_id) %}
         {{ mapped_conditions.get(current_condition, 'clear') }}
       rain: >
-        {{ myforecasts[weather_entity_id]['forecast'][0].precipitation | default(0) }}
+        {% set forecast_rain = myforecasts[weather_entity_id]['forecast'][0].precipitation | default(0) | float(0) %}
+        {% if rain_today_entity != "" %}
+          {% set sensor_rain = states(rain_today_entity) | float(0) %}
+          {% if sensor_rain > forecast_rain %}
+            {{ sensor_rain }}
+          {% elif now().hour >= 20 %}
+            {{ sensor_rain }}
+          {% else %}
+            {{ forecast_rain }}
+          {% endif %}
+        {% else %}
+          {{ forecast_rain }}
+        {% endif %}
       t_min: >
-        {{ myforecasts[weather_entity_id]['forecast'][0].templow }}
+        {% set forecast_min = myforecasts[weather_entity_id]['forecast'][0].templow | float %}
+        {% if temp_min_entity != "" %}
+          {% set sensor_min = states(temp_min_entity) | float %}
+          {% if sensor_min < forecast_min %}
+            {{ sensor_min }}
+          {% elif now().hour >= 10 %}
+            {{ sensor_min }}
+          {% else %}
+            {{ forecast_min }}
+          {% endif %}
+        {% else %}
+          {{ forecast_min }}
+        {% endif %}
       t_max: >
-        {{ myforecasts[weather_entity_id]['forecast'][0].temperature }}
+        {% set forecast_max = myforecasts[weather_entity_id]['forecast'][0].temperature | float %}
+        {% if temp_max_entity != "" %}
+          {% set sensor_max = states(temp_max_entity) | float %}
+          {% if sensor_max > forecast_max %}
+            {{ sensor_max }}
+          {% elif now().hour >= 20 %}
+            {{ sensor_max }}
+          {% else %}
+            {{ forecast_max }}
+          {% endif %}
+        {% else %}
+          {{ forecast_max }}
+        {% endif %}
       humidity: >
-        {{ state_attr(weather_entity_id,'humidity') }}
+        {{ state_attr(weather_entity_id, 'humidity') }}
       rain_prob: >
         {% if rain_prob_entity != "" %}
-          {{ states(rain_prob_entity) | int }}
+          {{ states(rain_prob_entity) | int(0) }}
+        {% elif myforecasts[weather_entity_id]['forecast'][0].precipitation_probability is defined %}
+          {{ myforecasts[weather_entity_id]['forecast'][0].precipitation_probability | int(0) }}
         {% else %}
-          {{ myforecasts[weather_entity_id]['forecast'][0].get('humidity', 50) }}
+          {{ state_attr(weather_entity_id, 'humidity') | default(50) | int }}
         {% endif %}
       temp: >
-        {{ state_attr(weather_entity_id, 'temperature') }}
+        {% set forecast_min = myforecasts[weather_entity_id]['forecast'][0].templow | float(0) %}
+        {% set final_min = forecast_min %}
+        {% if temp_min_entity != "" %}
+          {% set sensor_min = states(temp_min_entity) | float(0) %}
+          {% set final_min = sensor_min if (sensor_min < forecast_min or now().hour >= 10) else forecast_min %}
+        {% endif %}
+        {% set forecast_max = myforecasts[weather_entity_id]['forecast'][0].temperature | float(0) %}
+        {% set final_max = forecast_max %}
+        {% if temp_max_entity != "" %}
+          {% set sensor_max = states(temp_max_entity) | float(0) %}
+          {% set final_max = sensor_max if (sensor_max > forecast_max or now().hour >= 20) else forecast_max %}
+        {% endif %}
+        {{ ((final_min + final_max) / 2) | round(1) }}
       wind_speed: >
         {{ (state_attr(weather_entity_id, 'wind_speed') | float / 3.6) | round(1) }}
       pressure: >
         {{ state_attr(weather_entity_id, 'pressure') }}
+      t_dew: >
+        {{ state_attr(weather_entity_id, 'dew_point') }}
         
   - alias: "Sync forecast days"
     repeat:
-      count: "{{ number_of_days_forecast }}"
+      count: "{{ [number_of_days_forecast, myforecasts[weather_entity_id]['forecast'] | length - 1] | min }}"
       sequence:
         - action: netro_watering.report_weather
           data:
@@ -115,7 +201,7 @@ sequence:
               {% set current_condition = myforecasts[weather_entity_id]['forecast'][repeat.index].condition %}
               {{ mapped_conditions.get(current_condition, 'clear') }}
             rain: >
-              {% if 'precipitation' in myforecasts[weather_entity_id]['forecast'][repeat.index] %}
+              {% if myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation is defined %}
                 {{ myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation }}
               {% else %}
                 0
@@ -124,6 +210,12 @@ sequence:
               {{ myforecasts[weather_entity_id]['forecast'][repeat.index].templow }}
             t_max: >
               {{ myforecasts[weather_entity_id]['forecast'][repeat.index].temperature }}
+            rain_prob: >
+              {% if myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation_probability is defined %}
+                {{ myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation_probability | int(0) }}
+              {% else %}
+                50
+              {% endif %}
 
 mode: single
 icon: mdi:cloud-arrow-down-outline

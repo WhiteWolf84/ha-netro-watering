@@ -5,13 +5,14 @@ from __future__ import annotations
 import datetime
 import logging
 from datetime import timedelta
-from time import gmtime, strftime
 
 from dateutil.relativedelta import relativedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+import homeassistant.util.dt as dt_util
+import asyncio
 from pynetro import NetroClient, NetroConfig
 
 from .const import (
@@ -218,14 +219,17 @@ class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
 
         session = async_get_clientsession(self.hass)
         client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-        res = await client.get_sensor_data(
-            self.serial_number,
-            start_date=(
-                datetime.date.today()
-                - timedelta(days=self.sensor_value_days_before_today)
-            ).strftime("%Y-%m-%d"),
-            end_date=datetime.date.today().strftime("%Y-%m-%d"),
-        )
+        try:
+            res = await client.get_sensor_data(
+                self.serial_number,
+                start_date=(
+                    dt_util.now().date()
+                    - timedelta(days=self.sensor_value_days_before_today)
+                ).strftime("%Y-%m-%d"),
+                end_date=dt_util.now().date().strftime("%Y-%m-%d"),
+            )
+        except Exception as err:
+            raise UpdateFailed(f"Errore comunicando con API Netro per sensore: {err}") from err
 
         # get meta data
         meta_data = res["meta"]
@@ -274,10 +278,6 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
         past_schedule, coming_schedules, moistures : lists of schedules/moistures, these latter represented by a dictionary : key = str and value = any
         """
 
-        past_schedules = []
-        coming_schedules = []
-        moistures = []
-
         def __init__(
             self,
             controller: NetroControllerUpdateCoordinator,
@@ -294,6 +294,9 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
             self.name = name
             self.serial_number = serial_number + "_" + str(ith)  # virtual serial number
             self.parent_controller = controller
+            self.past_schedules: list = []
+            self.coming_schedules: list = []
+            self.moistures: list = []
 
         async def start_watering(
             self, duration: int, delay: int, start_time: datetime.time
@@ -440,9 +443,6 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
     # _schedules and _moistures are list of dict whose key = str and value = any
     # _active_zones is a dictionary indexed by the zone ith and whose value is a Zone object
     # _coming_schedules_ordered is the coming schedules oredered as generated from _schedules
-    _schedules = []
-    _moistures = []
-
     def __init__(
         self,
         hass: HomeAssistant,
@@ -476,6 +476,8 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
         self.schedules_months_before = schedules_months_before
         self.schedules_months_after = schedules_months_after
         self._active_zones = {}
+        self._schedules: list = []
+        self._moistures: list = []
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -525,7 +527,7 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
                 if schedule[NETRO_SCHEDULE_ZONE] == zone_key
                 and schedule[NETRO_SCHEDULE_STATUS] == NETRO_SCHEDULE_VALID
                 and schedule[NETRO_SCHEDULE_START_TIME]
-                > strftime("%Y-%m-%dT%H:%M:%S", gmtime())
+                > dt_util.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
             ]
 
             # sorting filtered coming schedules on start time ascending
@@ -623,8 +625,8 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
     def current_calendar_schedule(self) -> dict | None:
         """Return current or next coming schedule if any."""
         for schedule in self._schedules:
-            if schedule[NETRO_SCHEDULE_END_TIME] > strftime(
-                "%Y-%m-%dT%H:%M:%S", gmtime()
+            if schedule[NETRO_SCHEDULE_END_TIME] > dt_util.utcnow().strftime(
+                "%Y-%m-%dT%H:%M:%S"
             ):
                 return self._calendar_schedule(schedule)
 
@@ -753,7 +755,7 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
 
         # set update_interval according to current slowdown factor
         self.current_slowdown_factor = get_slowdown_factor(
-            self.slowdown_factors, datetime.datetime.now()
+            self.slowdown_factors, dt_util.now()
         )
         self.update_interval = datetime.timedelta(
             minutes=self.refresh_interval * self.current_slowdown_factor
@@ -761,7 +763,7 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug(
             "Current time is %s, current slowdown factor is %d, next update in %d minutes",
-            datetime.datetime.now().time().strftime("%H:%M:%S"),
+            dt_util.now().time().strftime("%H:%M:%S"),
             self.current_slowdown_factor,
             self.update_interval.total_seconds() / 60,
         )
@@ -779,7 +781,34 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
         # get main data
         session = async_get_clientsession(self.hass)
         client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-        res = await client.get_info(self.serial_number)
+
+        # pre-calculate dates for get_schedules
+        start_date = str(
+            dt_util.now().date()
+            - relativedelta(months=self.schedules_months_before)
+        )
+        end_date = str(
+            dt_util.now().date()
+            + relativedelta(months=self.schedules_months_after)
+        )
+
+        try:
+            async with asyncio.TaskGroup() as tg:
+                res_info_task = tg.create_task(client.get_info(self.serial_number))
+                res_moistures_task = tg.create_task(client.get_moistures(self.serial_number))
+                res_schedules_task = tg.create_task(
+                    client.get_schedules(
+                        self.serial_number,
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                )
+
+            res = res_info_task.result()
+            res_moistures = res_moistures_task.result()
+            res_schedules = res_schedules_task.result()
+        except Exception as err:
+            raise UpdateFailed(f"Errore comunicando con API Netro per controller: {err}") from err
 
         device_data = res["data"]["device"]
         meta_data = res["meta"]
@@ -819,31 +848,12 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
                     self.serial_number,
                 )
 
-        # get moistures
-        session = async_get_clientsession(self.hass)
-        client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-        res = await client.get_moistures(self.serial_number)
-
         # update controller and zone attributes from moistures
-        self._update_from_moistures(res["data"]["moistures"])
-
-        # get schedules
-        session = async_get_clientsession(self.hass)
-        client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-        res = await client.get_schedules(
-            self.serial_number,
-            start_date=str(
-                datetime.date.today()
-                - relativedelta(months=self.schedules_months_before)
-            ),
-            end_date=str(
-                datetime.date.today()
-                + relativedelta(months=self.schedules_months_after)
-            ),
-        )
+        self._update_from_moistures(res_moistures["data"]["moistures"])
 
         # update controller and zone attributes from schedules
-        self._update_from_schedules(res["data"]["schedules"])
+        self._update_from_schedules(res_schedules["data"]["schedules"])
+
 
     async def enable(self):
         """Enable controller."""

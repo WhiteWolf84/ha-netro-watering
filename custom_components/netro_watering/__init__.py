@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import logging
 import re
 from datetime import date, datetime
 
+import aiohttp
 import validators
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -51,6 +53,9 @@ from .const import (
     CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
     CONF_SERIAL_NUMBER,
     CONF_SLOWDOWN_FACTORS,
+    CONF_SLOWDOWN_START_TIME,
+    CONF_SLOWDOWN_END_TIME,
+    CONF_SLOWDOWN_MULTIPLIER,
     CONTROLLER_DEVICE_TYPE,
     CTRL_REFRESH_INTERVAL_MN,
     DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
@@ -84,6 +89,11 @@ from .coordinator import (
     prepare_slowdown_factors,
 )
 from .http_client import AiohttpClient
+
+# Type alias for Netro config entries (HA 2026+ / Python 3.12+)
+type NetroConfigEntry = ConfigEntry[
+    NetroControllerUpdateCoordinator | NetroSensorUpdateCoordinator
+]
 
 # Here is the list of the platforms that we want to support.
 # sensor is for the netro ground sensors, switch is for the zones
@@ -335,7 +345,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:  # noqa: C901
+async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> bool:  # noqa: C901
     """Set up Netro Watering from a config entry."""
 
     _LOGGER.debug(
@@ -348,10 +358,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:  #
     # access to global parameters
     gp = hass.data.get(DOMAIN, {}).get(GLOBAL_PARAMETERS, {})
 
-    # get global parameters any type of device could be interested in
+    # get parameters any type of device could be interested in
+    import copy
+    
+    old_sd_factors = entry.options.get(CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS, []))
+    default_sd_start = "22:00"
+    default_sd_end = "06:00"
+    default_sd_mult = 1
+    
+    if isinstance(old_sd_factors, list) and len(old_sd_factors) > 0:
+        first_sd = old_sd_factors[0]
+        default_sd_start = first_sd.get("from", default_sd_start)
+        default_sd_end = first_sd.get("to", default_sd_end)
+        default_sd_mult = first_sd.get("sdf", default_sd_mult)
+        
+    sd_start = entry.options.get(CONF_SLOWDOWN_START_TIME, default_sd_start)
+    sd_end = entry.options.get(CONF_SLOWDOWN_END_TIME, default_sd_end)
+    sd_mult = entry.options.get(CONF_SLOWDOWN_MULTIPLIER, default_sd_mult)
+
     slowdown_factors = None
-    if gp.get(CONF_SLOWDOWN_FACTORS) is not None:
-        slowdown_factors = gp[CONF_SLOWDOWN_FACTORS]
+    if sd_mult > 1 and sd_start and sd_end:
+        slowdown_factors = [{"from": sd_start, "to": sd_end, "sdf": sd_mult}]
+        prepare_slowdown_factors(slowdown_factors)
+
 
     if entry.data[CONF_DEVICE_TYPE] == SENSOR_DEVICE_TYPE:
         # get sensor specific parameters, look first in the options,
@@ -439,7 +468,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:  #
             sw_version=entry.data[CONF_DEVICE_SW_VERSION],
         )
         await sensor_coordinator.async_config_entry_first_refresh()
-        hass.data[DOMAIN][entry.entry_id] = sensor_coordinator
+        entry.runtime_data = sensor_coordinator
         _LOGGER.info("Just created : %s", sensor_coordinator)
     elif entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
         opt = entry.options
@@ -553,7 +582,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:  #
             sw_version=entry.data[CONF_DEVICE_SW_VERSION],
         )
         await controller_coordinator.async_config_entry_first_refresh()
-        hass.data[DOMAIN][entry.entry_id] = controller_coordinator
+        entry.runtime_data = controller_coordinator
 
         # create device in the device registry
         # in order to be able to link the zones to the controller
@@ -757,9 +786,10 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
 
         # get serial number
         entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-        if entry_id not in hass.data[DOMAIN]:
+        config_entry = hass.config_entries.async_get_entry(entry_id)
+        if config_entry is None or config_entry.domain != DOMAIN:
             raise HomeAssistantError(f"Config entry id does not exist: {entry_id}")
-        coordinator = hass.data[DOMAIN][entry_id]
+        coordinator = config_entry.runtime_data
 
         key = coordinator.serial_number
 
@@ -794,22 +824,38 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
 
         session = async_get_clientsession(hass)
         client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-        await client.report_weather(
-            key,
-            date=str(weather_asof),
-            condition=(
-                weather_condition.value if weather_condition is not None else None
-            ),
-            rain=weather_rain,
-            rain_prob=weather_rain_prob,
-            temp=weather_temp,
-            t_min=weather_t_min,
-            t_max=weather_t_max,
-            t_dew=weather_t_dew,
-            wind_speed=weather_wind_speed,
-            humidity=weather_humidity,
-            pressure=weather_pressure,
-        )
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await client.report_weather(
+                    key,
+                    date=str(weather_asof),
+                    condition=(
+                        weather_condition.value if weather_condition is not None else None
+                    ),
+                    rain=weather_rain,
+                    rain_prob=weather_rain_prob,
+                    temp=weather_temp,
+                    t_min=weather_t_min,
+                    t_max=weather_t_max,
+                    t_dew=weather_t_dew,
+                    wind_speed=weather_wind_speed,
+                    humidity=weather_humidity,
+                    pressure=weather_pressure,
+                )
+                break
+            except (TimeoutError, aiohttp.ClientError) as err:
+                if attempt == max_attempts:
+                    raise HomeAssistantError(
+                        f"Netro API unreachable after {max_attempts} attempts: {err}"
+                    ) from err
+                _LOGGER.warning(
+                    "Netro report_weather attempt %d/%d failed (%s), retrying in 10s…",
+                    attempt,
+                    max_attempts,
+                    err,
+                )
+                await asyncio.sleep(10)
 
     # only one Report weather service to be created for all config entries
     _register_service_if_not_exists(
@@ -820,9 +866,10 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
         """Service call to refresh data of Netro devices."""
 
         entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-        if entry_id not in hass.data[DOMAIN]:
+        config_entry = hass.config_entries.async_get_entry(entry_id)
+        if config_entry is None or config_entry.domain != DOMAIN:
             raise HomeAssistantError(f"Config entry id does not exist: {entry_id}")
-        coordinator: DataUpdateCoordinator = hass.data[DOMAIN][entry_id]
+        coordinator: DataUpdateCoordinator = config_entry.runtime_data
 
         _LOGGER.info(
             "Running custom service 'Refresh data' on %s device", coordinator.name
@@ -839,9 +886,10 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
         """Service call to stop watering for a given number of days."""
 
         entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-        if entry_id not in hass.data[DOMAIN]:
+        config_entry = hass.config_entries.async_get_entry(entry_id)
+        if config_entry is None or config_entry.domain != DOMAIN:
             raise HomeAssistantError(f"Config entry id does not exist: {entry_id}")
-        coordinator: DataUpdateCoordinator = hass.data[DOMAIN][entry_id]
+        coordinator: DataUpdateCoordinator = config_entry.runtime_data
 
         _LOGGER.info(
             "Running custom service 'No Water' for %s days on %s device",
@@ -859,12 +907,11 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
     )
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        _LOGGER.info("Deleting %s", hass.data[DOMAIN][entry.entry_id])
-        hass.data[DOMAIN].pop(entry.entry_id)
+        _LOGGER.info("Unloaded config entry: %s", entry.runtime_data)
 
         # Only remove services if platform unload succeeded
         # the Set moisture service has to be removed if the current entry is a controller

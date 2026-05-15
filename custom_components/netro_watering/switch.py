@@ -43,6 +43,8 @@ from .coordinator import NetroControllerUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 1
+
 # mypy: disable-error-code="arg-type"
 
 SERVICE_START_WATERING = "start_watering"
@@ -121,7 +123,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up entry for all controller switches."""
     if entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
-        controller: NetroControllerUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+        controller: NetroControllerUpdateCoordinator = entry.runtime_data
 
         gp = hass.data.get(DOMAIN, {}).get(GLOBAL_PARAMETERS, {})
 
@@ -325,13 +327,7 @@ class ControllerEnablingSwitch(
         _LOGGER.info("Disabling %s device", self.coordinator.name)
         await self.coordinator.async_request_refresh()
 
-    def turn_on(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch on."""
-        asyncio.run(self.async_turn_on(**kwargs))
 
-    def turn_off(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch off."""
-        asyncio.run(self.async_turn_off(**kwargs))
 
     @property
     def is_on(self) -> bool:
@@ -431,13 +427,7 @@ class ZoneWateringSwitch(
         await asyncio.sleep(self._before_refresh_seconds)
         await self.coordinator.async_request_refresh()
 
-    def turn_on(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch on."""
-        asyncio.run(self.async_turn_on(**kwargs))
 
-    def turn_off(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch off."""
-        asyncio.run(self.async_turn_off(**kwargs))
 
     @property
     def is_on(self) -> bool:
@@ -524,13 +514,7 @@ class ControllerWateringSwitch(
         await asyncio.sleep(self._before_refresh_seconds)
         await self.coordinator.async_request_refresh()
 
-    def turn_on(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch on."""
-        asyncio.run(self.async_turn_on(**kwargs))
 
-    def turn_off(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch off."""
-        asyncio.run(self.async_turn_off(**kwargs))
 
     @property
     def is_on(self) -> bool:

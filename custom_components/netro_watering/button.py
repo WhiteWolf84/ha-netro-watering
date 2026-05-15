@@ -16,6 +16,8 @@ from .coordinator import NetroControllerUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 1
+
 NETRO_CONTROLLER_BUTTON_DESCRIPTION = ButtonEntityDescription(
     key="refresh",
     name="Refresh",
@@ -29,7 +31,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the button platform."""
-    controller: NetroControllerUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    controller: NetroControllerUpdateCoordinator = entry.runtime_data
     _LOGGER.info("Adding button entity for device = %s", controller.device_name)
 
     async_add_entities(
@@ -60,12 +62,6 @@ class NetroRefreshButton(
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.serial_number}-{description.key}"
         self._attr_device_info = coordinator.device_info
-
-    def press(self) -> None:
-        """Synchronous press method required by ButtonEntity."""
-        import asyncio
-
-        asyncio.run(self.async_press())
 
     async def async_press(self) -> None:
         """Pressing the button requests an immediate update."""
