@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import logging
 import re
 from datetime import date, datetime
 
+import aiohttp
 import validators
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -822,22 +824,38 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
 
         session = async_get_clientsession(hass)
         client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-        await client.report_weather(
-            key,
-            date=str(weather_asof),
-            condition=(
-                weather_condition.value if weather_condition is not None else None
-            ),
-            rain=weather_rain,
-            rain_prob=weather_rain_prob,
-            temp=weather_temp,
-            t_min=weather_t_min,
-            t_max=weather_t_max,
-            t_dew=weather_t_dew,
-            wind_speed=weather_wind_speed,
-            humidity=weather_humidity,
-            pressure=weather_pressure,
-        )
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await client.report_weather(
+                    key,
+                    date=str(weather_asof),
+                    condition=(
+                        weather_condition.value if weather_condition is not None else None
+                    ),
+                    rain=weather_rain,
+                    rain_prob=weather_rain_prob,
+                    temp=weather_temp,
+                    t_min=weather_t_min,
+                    t_max=weather_t_max,
+                    t_dew=weather_t_dew,
+                    wind_speed=weather_wind_speed,
+                    humidity=weather_humidity,
+                    pressure=weather_pressure,
+                )
+                break
+            except (TimeoutError, aiohttp.ClientError) as err:
+                if attempt == max_attempts:
+                    raise HomeAssistantError(
+                        f"Netro API unreachable after {max_attempts} attempts: {err}"
+                    ) from err
+                _LOGGER.warning(
+                    "Netro report_weather attempt %d/%d failed (%s), retrying in 10s…",
+                    attempt,
+                    max_attempts,
+                    err,
+                )
+                await asyncio.sleep(10)
 
     # only one Report weather service to be created for all config entries
     _register_service_if_not_exists(
