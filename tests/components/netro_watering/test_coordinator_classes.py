@@ -383,10 +383,14 @@ class TestNetroControllerUpdateCoordinator:
             "custom_components.netro_watering.coordinator.NetroClient"
         ) as mock_client_class, patch(
             "custom_components.netro_watering.coordinator.datetime"
-        ) as mock_datetime:
+        ) as mock_datetime, patch(
+            "custom_components.netro_watering.coordinator.dt_util"
+        ) as mock_dt_util:
             # Configure datetime mock
             mock_datetime.datetime.now.return_value = fixed_time
             mock_datetime.timedelta = datetime.timedelta  # Keep timedelta working
+            mock_dt_util.now.return_value = fixed_time
+            mock_dt_util.utcnow.return_value = fixed_time
 
             # Configure the client mock
             mock_client = AsyncMock()

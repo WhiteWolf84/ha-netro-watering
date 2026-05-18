@@ -94,7 +94,7 @@ class TestSwitchAsyncSetupEntry:
         # Setup
         mock_platform = MagicMock()
         mock_get_platform.return_value = mock_platform
-        mock_hass.data[DOMAIN][mock_controller_entry.entry_id] = mock_coordinator
+        mock_controller_entry.runtime_data = mock_coordinator
 
         # Execute
         await async_setup_entry(mock_hass, mock_controller_entry, mock_add_entities)
@@ -144,7 +144,7 @@ class TestSwitchAsyncSetupEntry:
             CONF_DEFAULT_WATERING_DELAY: 5,
             CONF_DELAY_BEFORE_REFRESH: 10,
         }
-        mock_hass.data[DOMAIN][mock_controller_entry.entry_id] = mock_coordinator
+        mock_controller_entry.runtime_data = mock_coordinator
 
         # Execute
         await async_setup_entry(mock_hass, mock_controller_entry, mock_add_entities)
@@ -185,8 +185,8 @@ class TestSwitchAsyncSetupEntry:
         # Setup with global parameters
         mock_platform = MagicMock()
         mock_get_platform.return_value = mock_platform
+        mock_controller_entry.runtime_data = mock_coordinator
         mock_hass.data[DOMAIN] = {
-            mock_controller_entry.entry_id: mock_coordinator,
             GLOBAL_PARAMETERS: {
                 CONF_DEFAULT_WATERING_DELAY: 15,
                 CONF_DELAY_BEFORE_REFRESH: 20,
@@ -224,7 +224,7 @@ class TestSwitchAsyncSetupEntry:
             CONF_DEFAULT_WATERING_DELAY: -5,
             CONF_DELAY_BEFORE_REFRESH: "not_a_number",
         }
-        mock_hass.data[DOMAIN][mock_controller_entry.entry_id] = mock_coordinator
+        mock_controller_entry.runtime_data = mock_coordinator
 
         # Execute
         await async_setup_entry(mock_hass, mock_controller_entry, mock_add_entities)
@@ -256,7 +256,7 @@ class TestSwitchAsyncSetupEntry:
         mock_controller_entry.options = {
             CONF_DURATION: 200,  # Above MAX_WATERING_DURATION
         }
-        mock_hass.data[DOMAIN][mock_controller_entry.entry_id] = mock_coordinator
+        mock_controller_entry.runtime_data = mock_coordinator
 
         # Execute
         await async_setup_entry(mock_hass, mock_controller_entry, mock_add_entities)
@@ -292,7 +292,7 @@ class TestSwitchAsyncSetupEntry:
         # Setup
         mock_platform = MagicMock()
         mock_get_platform.return_value = mock_platform
-        mock_hass.data[DOMAIN][mock_controller_entry.entry_id] = mock_coordinator
+        mock_controller_entry.runtime_data = mock_coordinator
 
         # Execute
         await async_setup_entry(mock_hass, mock_controller_entry, mock_add_entities)
