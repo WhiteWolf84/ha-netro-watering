@@ -48,7 +48,6 @@
   dict({
     'integration_services_removed': True,
     'moisture_service_not_removed': True,
-    'sensor_removed': True,
     'total_service_removals': 3,
     'unload_successful': True,
   })
@@ -57,7 +56,6 @@
   dict({
     'controller_preserved': True,
     'no_services_removed': True,
-    'sensor_removed': True,
     'unload_successful': True,
   })
 # ---

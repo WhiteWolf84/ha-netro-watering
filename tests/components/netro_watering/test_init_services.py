@@ -163,10 +163,13 @@ class TestServices:
     @pytest.mark.asyncio
     async def test_refresh_service_success(self, mock_hass):
         """Test successful refresh service call."""
-        # Setup coordinator mock
+        # Setup coordinator mock via runtime_data (modern HA pattern)
         mock_coordinator = AsyncMock()
         mock_coordinator.name = "Test Device"
-        mock_hass.data[DOMAIN]["test_entry"] = mock_coordinator
+        mock_config_entry = MagicMock()
+        mock_config_entry.domain = DOMAIN
+        mock_config_entry.runtime_data = mock_coordinator
+        mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
@@ -242,7 +245,6 @@ class TestAsyncUnloadEntry:
 
         assert result is True
         mock_hass.config_entries.async_unload_platforms.assert_called_once()
-        assert "test_entry" not in mock_hass.data[DOMAIN]
 
     @pytest.mark.asyncio
     async def test_async_unload_entry_controller_removes_services(

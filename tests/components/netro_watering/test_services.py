@@ -986,7 +986,6 @@ class TestAsyncUnloadEntry:
         )
 
         # Setup: Only one controller entry, no other loaded entries
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_coordinator"
         mock_hass.config_entries.async_loaded_entries.return_value = [controller_entry]
 
         with patch("custom_components.netro_watering._LOGGER") as mock_logger:
@@ -1039,8 +1038,7 @@ class TestAsyncUnloadEntry:
             async_unload_entry,
         )
 
-        # Setup: Two controller entries
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_coordinator_1"
+        # Setup: Two controller entries (keep controller_2 in data for "preserved" check)
         mock_hass.data[DOMAIN][controller_entry_2.entry_id] = "mock_coordinator_2"
         mock_hass.config_entries.async_loaded_entries.return_value = [
             controller_entry,
@@ -1086,8 +1084,7 @@ class TestAsyncUnloadEntry:
             async_unload_entry,
         )
 
-        # Setup: One controller + two sensors
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_controller"
+        # Setup: One controller + two sensors (keep sensors in data for "preserved" check)
         mock_hass.data[DOMAIN][sensor_entry.entry_id] = "mock_sensor_1"
         mock_hass.data[DOMAIN][sensor_entry_2.entry_id] = "mock_sensor_2"
         mock_hass.config_entries.async_loaded_entries.return_value = [
@@ -1138,9 +1135,8 @@ class TestAsyncUnloadEntry:
         """Test that unloading a sensor doesn't affect the moisture service."""
         from custom_components.netro_watering import async_unload_entry
 
-        # Setup: One controller + one sensor
+        # Setup: One controller + one sensor (keep controller in data for "preserved" check)
         mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_controller"
-        mock_hass.data[DOMAIN][sensor_entry.entry_id] = "mock_sensor"
         mock_hass.config_entries.async_loaded_entries.return_value = [
             controller_entry,
             sensor_entry,
@@ -1148,8 +1144,7 @@ class TestAsyncUnloadEntry:
 
         result = await async_unload_entry(mock_hass, sensor_entry)
 
-        # Verify sensor was removed from hass.data
-        assert sensor_entry.entry_id not in mock_hass.data[DOMAIN]
+        # Verify controller was not affected
         assert controller_entry.entry_id in mock_hass.data[DOMAIN]
 
         # Verify NO services were removed (controller still exists)
@@ -1157,7 +1152,6 @@ class TestAsyncUnloadEntry:
 
         result_data = {
             "unload_successful": result,
-            "sensor_removed": sensor_entry.entry_id not in mock_hass.data[DOMAIN],
             "controller_preserved": controller_entry.entry_id in mock_hass.data[DOMAIN],
             "no_services_removed": mock_hass.services.async_remove.call_count == 0,
         }
@@ -1171,13 +1165,9 @@ class TestAsyncUnloadEntry:
         from custom_components.netro_watering import async_unload_entry
 
         # Setup: Only one sensor entry
-        mock_hass.data[DOMAIN][sensor_entry.entry_id] = "mock_sensor"
         mock_hass.config_entries.async_loaded_entries.return_value = [sensor_entry]
 
         result = await async_unload_entry(mock_hass, sensor_entry)
-
-        # Verify sensor was removed
-        assert sensor_entry.entry_id not in mock_hass.data[DOMAIN]
 
         # Verify moisture service was NOT removed (no controllers to begin with)
         from custom_components.netro_watering import SERVICE_SET_MOISTURE_NAME
@@ -1204,7 +1194,6 @@ class TestAsyncUnloadEntry:
 
         result_data = {
             "unload_successful": result,
-            "sensor_removed": sensor_entry.entry_id not in mock_hass.data[DOMAIN],
             "moisture_service_not_removed": len(moisture_service_calls) == 0,
             "integration_services_removed": len(integration_services_calls) == 3,
             "total_service_removals": mock_hass.services.async_remove.call_count,
@@ -1250,8 +1239,7 @@ class TestAsyncUnloadEntry:
             async_unload_entry,
         )
 
-        # Setup: 2 controllers + 2 sensors
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_controller_1"
+        # Setup: 2 controllers + 2 sensors (keep non-unloaded entries for "preserved" checks)
         mock_hass.data[DOMAIN][controller_entry_2.entry_id] = "mock_controller_2"
         mock_hass.data[DOMAIN][sensor_entry.entry_id] = "mock_sensor_1"
         mock_hass.data[DOMAIN][sensor_entry_2.entry_id] = "mock_sensor_2"
@@ -1317,8 +1305,8 @@ class TestAsyncUnloadEntry:
         with patch("custom_components.netro_watering._LOGGER") as mock_logger:
             result = await async_unload_entry(mock_hass, controller_entry)
 
-        # Verify deletion logging
-        mock_logger.info.assert_any_call("Deleting %s", mock_coordinator)
+        # Verify unload logging
+        mock_logger.info.assert_any_call("Unloaded config entry: %s", controller_entry.runtime_data)
 
         # Verify service removal logging
         mock_logger.info.assert_any_call(
@@ -1333,7 +1321,7 @@ class TestAsyncUnloadEntry:
 
         # Count all logging calls
         deletion_logs = [
-            call for call in mock_logger.info.call_args_list if "Deleting" in call[0][0]
+            call for call in mock_logger.info.call_args_list if "Unloaded" in call[0][0]
         ]
         service_removal_logs = [
             call

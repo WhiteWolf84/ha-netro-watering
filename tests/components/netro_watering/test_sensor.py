@@ -109,8 +109,7 @@ class TestSensorAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test async_setup_entry for sensor device type."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN]["test_entry_id"] = mock_sensor_coordinator
+        mock_config_entry_sensor.runtime_data = mock_sensor_coordinator
 
         # Call the function
         await async_setup_entry(
@@ -153,8 +152,7 @@ class TestSensorAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test async_setup_entry for controller device without battery."""
-        # Setup hass.data with the coordinator (without battery attribute)
-        mock_hass.data[DOMAIN]["test_entry_id"] = mock_controller_coordinator
+        mock_config_entry_controller.runtime_data = mock_controller_coordinator
 
         # Mock hasattr to return False for battery level
         with patch("builtins.hasattr") as mock_hasattr:
@@ -201,10 +199,7 @@ class TestSensorAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test async_setup_entry for controller device with battery."""
-        # Setup hass.data with the coordinator (with battery attribute)
-        mock_hass.data[DOMAIN][
-            "test_entry_id"
-        ] = mock_controller_coordinator_with_battery
+        mock_config_entry_controller.runtime_data = mock_controller_coordinator_with_battery
 
         # Call the function
         await async_setup_entry(
@@ -226,23 +221,6 @@ class TestSensorAsyncSetupEntry:
         battery_entity = battery_call_entities[0]
         assert isinstance(battery_entity, NetroController)
         assert battery_entity.entity_description == NETRO_CONTROLLER_BATTERY_DESCRIPTION
-
-    @pytest.mark.asyncio
-    async def test_async_setup_entry_missing_coordinator(
-        self,
-        mock_hass,
-        mock_config_entry_sensor,
-        mock_async_add_entities,
-    ):
-        """Test async_setup_entry when coordinator is missing from hass.data."""
-        # Don't add coordinator to hass.data
-
-        with pytest.raises(KeyError):
-            await async_setup_entry(
-                mock_hass,
-                mock_config_entry_sensor,
-                mock_async_add_entities,
-            )
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_unknown_device_type(
