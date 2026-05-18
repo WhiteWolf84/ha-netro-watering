@@ -109,7 +109,7 @@ class TestAsyncSetupEntry:
             assert result is True
             mock_coordinator_class.assert_called_once()
             mock_coordinator.async_config_entry_first_refresh.assert_called_once()
-            assert mock_hass.data[DOMAIN]["sensor_entry_123"] == mock_coordinator
+            assert mock_sensor_entry.runtime_data == mock_coordinator
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_controller_success(
@@ -151,6 +151,7 @@ class TestAsyncSetupEntry:
             CONF_SERIAL_NUMBER: "TEST123",
             CONF_DEVICE_NAME: "Test Device",
         }
+        entry.options = {}
 
         with pytest.raises(
             HomeAssistantError, match="Config entry netro device type does not exist"
@@ -173,7 +174,16 @@ class TestServicesAdvanced:
         mock_coordinator.name = "Test Controller"
         mock_coordinator.no_water = AsyncMock()
         mock_coordinator.async_request_refresh = AsyncMock()
-        hass.data[DOMAIN]["test_entry"] = mock_coordinator
+
+        # Mock config entry with runtime_data (modern HA pattern)
+        mock_config_entry = MagicMock()
+        mock_config_entry.domain = DOMAIN
+        mock_config_entry.runtime_data = mock_coordinator
+
+        def _get_entry(entry_id):
+            return mock_config_entry if entry_id == "test_entry" else None
+
+        hass.config_entries.async_get_entry.side_effect = _get_entry
 
         hass.services = MagicMock()
         hass.services.has_service.return_value = False

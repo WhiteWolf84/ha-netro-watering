@@ -236,7 +236,7 @@ class TestDiagnosticsMainFunction:
     ):
         """Test async_get_config_entry_diagnostics with full data."""
         # Setup mocks
-        mock_hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
+        mock_config_entry.runtime_data = mock_coordinator
         mock_hass.states.get.return_value = mock_state
 
         with patch(

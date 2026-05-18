@@ -207,8 +207,8 @@ async def test_setup_sensor_device_success(
         # Verify that first_refresh was called
         mock_coordinator_instance.async_config_entry_first_refresh.assert_called_once()
 
-        # Verify that the coordinator was stored in hass.data
-        assert hass.data[DOMAIN]["test_sensor_entry"] == mock_coordinator_instance
+        # Verify that the coordinator was stored in runtime_data
+        assert mock_sensor_config_entry.runtime_data == mock_coordinator_instance
 
         # Verify that platforms were configured
         mock_forward.assert_called_once_with(
@@ -264,10 +264,8 @@ async def test_setup_sensor_device_with_custom_options(
         # Verify that first_refresh was called
         mock_coordinator_instance.async_config_entry_first_refresh.assert_called_once()
 
-        # Verify that the coordinator was stored in hass.data
-        assert (
-            hass.data[DOMAIN]["test_sensor_options_entry"] == mock_coordinator_instance
-        )
+        # Verify that the coordinator was stored in runtime_data
+        assert mock_sensor_config_entry_with_options.runtime_data == mock_coordinator_instance
 
         # Verify that platforms were configured
         mock_forward.assert_called_once_with(

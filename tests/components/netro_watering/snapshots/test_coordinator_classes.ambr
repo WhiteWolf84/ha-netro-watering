@@ -128,11 +128,11 @@
 # ---
 # name: TestNetroControllerUpdateCoordinator.test_async_update_data_with_api_error_get_info
   dict({
-    'exception_message': 'API Error on get_info',
-    'exception_type': 'Exception',
+    'exception_message': 'Errore comunicando con API Netro per controller: unhandled errors in a TaskGroup (1 sub-exception)',
+    'exception_type': 'UpdateFailed',
     'get_info_called': True,
-    'get_moistures_called': False,
-    'get_schedules_called': False,
+    'get_moistures_called': True,
+    'get_schedules_called': True,
   })
 # ---
 # name: TestNetroControllerUpdateCoordinator.test_async_update_data_with_valid_data
@@ -257,8 +257,8 @@
 # ---
 # name: TestNetroSensorUpdateCoordinator.test_async_update_data_with_api_error
   dict({
-    'exception_message': 'API Error',
-    'exception_type': 'Exception',
+    'exception_message': 'Errore comunicando con API Netro per sensore: API Error',
+    'exception_type': 'UpdateFailed',
   })
 # ---
 # name: TestNetroSensorUpdateCoordinator.test_async_update_data_with_empty_sensor_data

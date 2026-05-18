@@ -3,7 +3,7 @@
 import datetime
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -584,16 +584,19 @@ class TestNetroControllerUpdateCoordinator:
             mock_client.get_schedules.return_value = schedules_reference
             mock_client_class.return_value = mock_client
 
-            # Mock datetime.datetime.now() to return a specific time for predictable slowdown factor
+            # Mock datetime.datetime.now() and dt_util.now() for predictable slowdown factor
+            real_datetime = datetime.datetime(2025, 10, 11, 10, 0, 0)
             with patch(
                 "custom_components.netro_watering.coordinator.datetime"
-            ) as mock_datetime:
-                # Create a real datetime object for time 10:00
-                real_datetime = datetime.datetime(2025, 10, 11, 10, 0, 0)
+            ) as mock_datetime, patch(
+                "custom_components.netro_watering.coordinator.dt_util"
+            ) as mock_dt_util:
                 mock_datetime.datetime.now.return_value = real_datetime
                 mock_datetime.timedelta = datetime.timedelta  # Keep real timedelta
                 mock_datetime.date = datetime.date  # Keep real date
                 mock_datetime.time = datetime.time  # Keep real time
+                mock_dt_util.now.return_value = real_datetime
+                mock_dt_util.utcnow.return_value = real_datetime
 
                 # Execute the update
                 await controller_coordinator._async_update_data()
@@ -1040,10 +1043,12 @@ class TestNetroControllerCalendarMethods:
     ):
         """Test current_calendar_schedule returns next schedule when schedules exist."""
         with patch(
-            "custom_components.netro_watering.coordinator.strftime"
-        ) as mock_strftime:
+            "custom_components.netro_watering.coordinator.dt_util"
+        ) as mock_dt_util:
             # Mock current time to be before all schedules (October 1, 2025)
-            mock_strftime.return_value = "2025-10-01T12:00:00"
+            mock_now = MagicMock()
+            mock_now.strftime.return_value = "2025-10-01T12:00:00"
+            mock_dt_util.utcnow.return_value = mock_now
 
             current_schedule = (
                 initialized_controller_coordinator.current_calendar_schedule
@@ -1068,10 +1073,12 @@ class TestNetroControllerCalendarMethods:
     ):
         """Test current_calendar_schedule returns None when no future schedules exist."""
         with patch(
-            "custom_components.netro_watering.coordinator.strftime"
-        ) as mock_strftime:
+            "custom_components.netro_watering.coordinator.dt_util"
+        ) as mock_dt_util:
             # Mock current time to be after all schedules (December 31, 2025)
-            mock_strftime.return_value = "2025-12-31T23:59:59"
+            mock_now = MagicMock()
+            mock_now.strftime.return_value = "2025-12-31T23:59:59"
+            mock_dt_util.utcnow.return_value = mock_now
 
             current_schedule = (
                 initialized_controller_coordinator.current_calendar_schedule
