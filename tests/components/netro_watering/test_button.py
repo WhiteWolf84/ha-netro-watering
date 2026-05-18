@@ -55,8 +55,7 @@ class TestButtonAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test successful async_setup_entry for button platform."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][mock_config_entry.entry_id] = mock_controller_coordinator
+        mock_config_entry.runtime_data = mock_controller_coordinator
 
         with patch("custom_components.netro_watering.button._LOGGER") as mock_logger:
             # Call the function
@@ -88,23 +87,6 @@ class TestButtonAsyncSetupEntry:
             )
 
     @pytest.mark.asyncio
-    async def test_async_setup_entry_missing_coordinator(
-        self,
-        mock_hass,
-        mock_config_entry,
-        mock_async_add_entities,
-    ):
-        """Test async_setup_entry when coordinator is missing from hass.data."""
-        # Don't add coordinator to hass.data
-
-        with pytest.raises(KeyError):
-            await async_setup_entry(
-                mock_hass,
-                mock_config_entry,
-                mock_async_add_entities,
-            )
-
-    @pytest.mark.asyncio
     async def test_netro_refresh_button_creation_parameters(
         self,
         mock_hass,
@@ -113,8 +95,7 @@ class TestButtonAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test that NetroRefreshButton is created with correct parameters."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][mock_config_entry.entry_id] = mock_controller_coordinator
+        mock_config_entry.runtime_data = mock_controller_coordinator
 
         await async_setup_entry(
             mock_hass,

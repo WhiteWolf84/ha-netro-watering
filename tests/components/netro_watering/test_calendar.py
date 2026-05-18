@@ -76,10 +76,7 @@ class TestCalendarAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test successful async_setup_entry for calendar platform with controller."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][
-            mock_config_entry_controller.entry_id
-        ] = mock_controller_coordinator
+        mock_config_entry_controller.runtime_data = mock_controller_coordinator
 
         with patch("custom_components.netro_watering.calendar._LOGGER") as mock_logger:
             # Call the function
@@ -125,23 +122,6 @@ class TestCalendarAsyncSetupEntry:
         mock_async_add_entities.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_async_setup_entry_missing_coordinator(
-        self,
-        mock_hass,
-        mock_config_entry_controller,
-        mock_async_add_entities,
-    ):
-        """Test async_setup_entry when coordinator is missing from hass.data."""
-        # Don't add coordinator to hass.data
-
-        with pytest.raises(KeyError):
-            await async_setup_entry(
-                mock_hass,
-                mock_config_entry_controller,
-                mock_async_add_entities,
-            )
-
-    @pytest.mark.asyncio
     async def test_netro_calendar_creation_parameters(
         self,
         mock_hass,
@@ -150,10 +130,7 @@ class TestCalendarAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test that NetroCalendar is created with correct parameters."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][
-            mock_config_entry_controller.entry_id
-        ] = mock_controller_coordinator
+        mock_config_entry_controller.runtime_data = mock_controller_coordinator
 
         await async_setup_entry(
             mock_hass,

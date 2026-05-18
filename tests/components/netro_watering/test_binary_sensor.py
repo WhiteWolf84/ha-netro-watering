@@ -72,10 +72,7 @@ class TestBinarySensorAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test async_setup_entry with a controller that has active zones."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][
-            mock_controller_config_entry.entry_id
-        ] = mock_controller_coordinator
+        mock_controller_config_entry.runtime_data = mock_controller_coordinator
 
         with patch(
             "custom_components.netro_watering.binary_sensor._LOGGER"
@@ -124,8 +121,7 @@ class TestBinarySensorAsyncSetupEntry:
         coordinator.device_name = "Empty Controller"
         coordinator.active_zones = {}
 
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][mock_controller_config_entry.entry_id] = coordinator
+        mock_controller_config_entry.runtime_data = coordinator
 
         with patch(
             "custom_components.netro_watering.binary_sensor._LOGGER"
@@ -176,23 +172,6 @@ class TestBinarySensorAsyncSetupEntry:
             mock_async_add_entities.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_async_setup_entry_missing_coordinator(
-        self,
-        mock_hass,
-        mock_controller_config_entry,
-        mock_async_add_entities,
-    ):
-        """Test async_setup_entry when coordinator is missing from hass.data."""
-        # Don't add coordinator to hass.data
-
-        with pytest.raises(KeyError):
-            await async_setup_entry(
-                mock_hass,
-                mock_controller_config_entry,
-                mock_async_add_entities,
-            )
-
-    @pytest.mark.asyncio
     async def test_netro_zone_creation_parameters(
         self,
         mock_hass,
@@ -201,10 +180,7 @@ class TestBinarySensorAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test that NetroZone entities are created with correct parameters."""
-        # Setup hass.data with the coordinator
-        mock_hass.data[DOMAIN][
-            mock_controller_config_entry.entry_id
-        ] = mock_controller_coordinator
+        mock_controller_config_entry.runtime_data = mock_controller_coordinator
 
         await async_setup_entry(
             mock_hass,
