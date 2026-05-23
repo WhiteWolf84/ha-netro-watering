@@ -226,12 +226,12 @@
 # ---
 # name: TestNetroSensorUpdateCoordinator.test_async_update_data_metadata_processing
   dict({
-    'last_active_date_iso': '2025-10-10T20:58:13',
+    'last_active_date_iso': '2025-10-10T20:58:13+00:00',
     'tid': '1760129893_DFwy',
-    'time_iso': '2025-10-10T20:58:13',
+    'time_iso': '2025-10-10T20:58:13+00:00',
     'token_limit': 2000,
     'token_remaining': 1956,
-    'token_reset_date_iso': '2025-10-11T00:00:00',
+    'token_reset_date_iso': '2025-10-11T00:00:00+00:00',
     'version': '1.0',
   })
 # ---

@@ -9,7 +9,6 @@ import re
 from datetime import date, datetime
 
 import aiohttp
-import validators
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -313,19 +312,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # access to configuration.yaml
     if (netro_watering_config := config.get(DOMAIN)) is not None:
         if netro_watering_config.get("netro_api_url") is not None:
-            if validators.url(netro_watering_config["netro_api_url"]):
-                NetroConfig.default_base_url = netro_watering_config["netro_api_url"]
-                _LOGGER.info(
-                    "Set Netro Public API url to %s",
-                    netro_watering_config["netro_api_url"],
-                )
-            else:
-                _LOGGER.warning(
-                    "The URL provided for Netro API is ignored since it's not properly formed, "
-                    "please check '%s' section in the home assistant configuration file "
-                    "and correct the 'netro_api_url' entry",
-                    DOMAIN,
-                )
+            # URL already validated by CONFIG_SCHEMA via cv.url
+            NetroConfig.default_base_url = netro_watering_config["netro_api_url"]
+            _LOGGER.info(
+                "Set Netro Public API url to %s",
+                netro_watering_config["netro_api_url"],
+            )
 
     # set global config into the integration shared space
     hass.data[DOMAIN][GLOBAL_PARAMETERS] = netro_watering_config or {}

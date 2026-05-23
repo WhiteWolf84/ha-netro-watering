@@ -16,7 +16,9 @@ from homeassistant.components.switch import (
     SwitchEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -85,7 +87,7 @@ class NetroSwitchEntityDescription(SwitchEntityDescription, NetroRequiredKeysMix
 
     # Optional attributes (with default values)
     device_class: SwitchDeviceClass | None = None
-    entity_category: str | None = None
+    entity_category: EntityCategory | None = None
     entity_registry_enabled_default: bool = True
     entity_registry_visible_default: bool = True
     force_update: bool = False
@@ -375,13 +377,18 @@ class ZoneWateringSwitch(
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         start_time = kwargs.get(ATTR_WATERING_START_TIME)
+        start_time_utc = dt_util.as_utc(start_time) if start_time is not None else None
+        if start_time_utc is not None and start_time_utc <= dt_util.utcnow():
+            raise HomeAssistantError(
+                f"start_time must be later than now (UTC). Got {start_time_utc.isoformat()}"
+            )
         await getattr(
             self.coordinator.active_zones[self._zone_id],
             self.entity_description.netro_on_name,
         )(
             int(duration := kwargs.get(ATTR_WATERING_DURATION, self._duration_minutes)),
             int(delay := kwargs.get(ATTR_WATERING_DELAY, self._delay_minutes)),
-            dt_util.as_utc(start_time) if start_time is not None else None,
+            start_time_utc,
         )
         if delay == 0 and start_time is None:
             _LOGGER.info(
@@ -466,13 +473,18 @@ class ControllerWateringSwitch(
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         start_time = kwargs.get(ATTR_WATERING_START_TIME)
+        start_time_utc = dt_util.as_utc(start_time) if start_time is not None else None
+        if start_time_utc is not None and start_time_utc <= dt_util.utcnow():
+            raise HomeAssistantError(
+                f"start_time must be later than now (UTC). Got {start_time_utc.isoformat()}"
+            )
         await getattr(
             self.coordinator,
             self.entity_description.netro_on_name,
         )(
             int(duration := kwargs.get(ATTR_WATERING_DURATION, self._duration_minutes)),
             int(delay := kwargs.get(ATTR_WATERING_DELAY, self._delay_minutes)),
-            dt_util.as_utc(start_time) if start_time is not None else None,
+            start_time_utc,
         )
         if delay == 0 and start_time is None:
             _LOGGER.info(

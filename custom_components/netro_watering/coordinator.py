@@ -118,8 +118,25 @@ def get_slowdown_factor(slowdown_factors, this_time: datetime.time) -> int:
     return selected_factor
 
 
+def _parse_netro_utc(value: str) -> datetime.datetime:
+    """Parse a Netro datetime string and return a tz-aware datetime.
+
+    Netro returns naive ISO strings that are UTC; if the string already carries
+    tz info we preserve it instead of overwriting with UTC.
+    """
+    dt = datetime.datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.UTC)
+    return dt
+
+
 class Meta:
-    """Meta data returned by any Netro service related to corresponding device/sensor."""
+    """Meta data returned by any Netro service related to corresponding device/sensor.
+
+    Netro API returns datetime fields in UTC without explicit timezone suffix
+    (e.g. "2025-10-10T21:47:36"). We parse them as UTC-aware so consumers don't
+    need to attach tzinfo at each read site.
+    """
 
     def __init__(
         self,
@@ -136,9 +153,9 @@ class Meta:
         self.token_limit = token_limit
         self.token_remaining = token_remaining
         self.tid = tid
-        self.last_active_date = datetime.datetime.fromisoformat(last_active)
-        self.time = datetime.datetime.fromisoformat(time)
-        self.token_reset_date = datetime.datetime.fromisoformat(token_reset)
+        self.last_active_date = _parse_netro_utc(last_active)
+        self.time = _parse_netro_utc(time)
+        self.token_reset_date = _parse_netro_utc(token_reset)
 
 
 class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
@@ -258,7 +275,11 @@ class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
                 sensor_data[NETRO_SENSOR_LOCAL_TIME]
             )
             self.moisture = sensor_data[NETRO_SENSOR_MOISTURE]
-            self.sunlight = sensor_data[NETRO_SENSOR_SUNLIGHT]
+            # Netro Public API returns sunlight in klux; HA expects lux (LIGHT_LUX).
+            raw_sunlight = sensor_data[NETRO_SENSOR_SUNLIGHT]
+            self.sunlight = (
+                raw_sunlight * 1000 if raw_sunlight is not None else None
+            )
             self.celsius = sensor_data[NETRO_SENSOR_CELSIUS]
             self.fahrenheit = sensor_data[NETRO_SENSOR_FAHRENHEIT]
             self.battery_level = sensor_data[NETRO_SENSOR_BATTERY_LEVEL]
@@ -299,9 +320,15 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
             self.moistures: list = []
 
         async def start_watering(
-            self, duration: int, delay: int, start_time: datetime.time
+            self,
+            duration: int,
+            delay: int,
+            start_time: datetime.datetime | None,
         ) -> None:
-            """Start watering for the current zone for given duration in minutes."""
+            """Start watering for the current zone for given duration in minutes.
+
+            start_time, when provided, must be a UTC-aware datetime in the future.
+            """
             session = async_get_clientsession(self.parent_controller.hass)
             client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
             await client.water(
@@ -883,9 +910,15 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def start_watering(
-        self, duration: int, delay: int, start_time: datetime.time
+        self,
+        duration: int,
+        delay: int,
+        start_time: datetime.datetime | None,
     ) -> None:
-        """Start watering for the current zone for given duration in minutes."""
+        """Start watering all zones of the controller for given duration in minutes.
+
+        start_time, when provided, must be a UTC-aware datetime in the future.
+        """
         session = async_get_clientsession(self.hass)
         client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
         await client.water(

@@ -58,16 +58,15 @@ class TestAsyncSetup:
         assert "parameters" in hass.data[DOMAIN]
         assert hass.data[DOMAIN]["parameters"]["delay_before_refresh"] == 10
 
-    @pytest.mark.asyncio
-    async def test_async_setup_invalid_api_url(self, hass):
-        """Test async_setup with invalid API URL."""
+    def test_config_schema_invalid_api_url(self):
+        """Test that CONFIG_SCHEMA rejects an invalid API URL via cv.url."""
+        import voluptuous as vol
+
+        from custom_components.netro_watering import CONFIG_SCHEMA
+
         config = {DOMAIN: {"netro_api_url": "not-a-valid-url"}}
-
-        with patch("custom_components.netro_watering._LOGGER") as mock_logger:
-            result = await async_setup(hass, config)
-
-            assert result is True
-            mock_logger.warning.assert_called_once()
+        with pytest.raises(vol.Invalid):
+            CONFIG_SCHEMA(config)
 
 
 class TestServices:

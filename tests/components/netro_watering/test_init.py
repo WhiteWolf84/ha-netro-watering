@@ -49,26 +49,15 @@ async def test_async_setup_with_valid_netro_api_url(hass: HomeAssistant) -> None
         assert mock_netro_config.default_base_url == "https://api.custom-netro.com"
 
 
-@pytest.mark.asyncio
-async def test_async_setup_with_invalid_netro_api_url(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Test async_setup with invalid netro_api_url does not set NetroConfig.default_base_url."""
+def test_config_schema_rejects_invalid_netro_api_url() -> None:
+    """Test that CONFIG_SCHEMA rejects an invalid netro_api_url via cv.url."""
+    import voluptuous as vol
+
+    from custom_components.netro_watering import CONFIG_SCHEMA
+
     config: ConfigType = {DOMAIN: {"netro_api_url": "not-a-valid-url"}}
-
-    # ✅ Use INTEGRATION_PATH instead of hardcoded path
-    with patch(f"{INTEGRATION_PATH}.NetroConfig") as mock_netro_config:
-        original_url = "https://default-api.netro.com"
-        mock_netro_config.default_base_url = original_url
-
-        result = await async_setup(hass, config)
-
-        assert result is True
-        # Verify that default_base_url was NOT changed
-        assert mock_netro_config.default_base_url == original_url
-        # Verify warning was logged
-        assert "The URL provided for Netro API is ignored" in caplog.text
-        assert "not properly formed" in caplog.text
+    with pytest.raises(vol.Invalid):
+        CONFIG_SCHEMA(config)
 
 
 @pytest.mark.asyncio

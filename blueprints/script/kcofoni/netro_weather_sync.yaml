@@ -100,7 +100,7 @@ sequence:
         {{ now().strftime("%Y-%m-%d") }}
       condition: >
         {% set mapped_conditions = {
-          'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'clear',
+          'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'rain',
           'fog': 'cloudy', 'hail': 'rain', 'lightning': 'rain',
           'lightning-rainy': 'rain', 'partlycloudy': 'cloudy', 'pouring': 'rain',
           'rainy': 'rain', 'snowy': 'snow', 'snowy-rainy': 'snow',
@@ -158,7 +158,7 @@ sequence:
         {% elif myforecasts[weather_entity_id]['forecast'][0].precipitation_probability is defined %}
           {{ myforecasts[weather_entity_id]['forecast'][0].precipitation_probability | int(0) }}
         {% else %}
-          {{ state_attr(weather_entity_id, 'humidity') | default(50) | int }}
+          0
         {% endif %}
       temp: >
         {% set forecast_min = myforecasts[weather_entity_id]['forecast'][0].templow | float(0) %}
@@ -175,9 +175,31 @@ sequence:
         {% endif %}
         {{ ((final_min + final_max) / 2) | round(1) }}
       wind_speed: >
-        {{ (state_attr(weather_entity_id, 'wind_speed') | float / 3.6) | round(1) }}
+        {% set ws = state_attr(weather_entity_id, 'wind_speed') | float(0) %}
+        {% set unit = state_attr(weather_entity_id, 'wind_speed_unit') | default('km/h') %}
+        {% if unit == 'm/s' %}
+          {{ ws | round(2) }}
+        {% elif unit == 'mph' %}
+          {{ (ws * 0.44704) | round(2) }}
+        {% elif unit == 'ft/s' %}
+          {{ (ws * 0.3048) | round(2) }}
+        {% else %}
+          {{ (ws / 3.6) | round(2) }}
+        {% endif %}
       pressure: >
-        {{ state_attr(weather_entity_id, 'pressure') }}
+        {% set p = state_attr(weather_entity_id, 'pressure') | float(0) %}
+        {% set unit = state_attr(weather_entity_id, 'pressure_unit') | default('hPa') %}
+        {% if unit in ['hPa', 'mbar'] %}
+          {{ p | round(1) }}
+        {% elif unit == 'inHg' %}
+          {{ (p * 33.8639) | round(1) }}
+        {% elif unit == 'mmHg' %}
+          {{ (p * 1.33322) | round(1) }}
+        {% elif unit == 'kPa' %}
+          {{ (p * 10) | round(1) }}
+        {% else %}
+          {{ p | round(1) }}
+        {% endif %}
       t_dew: >
         {{ state_attr(weather_entity_id, 'dew_point') }}
         
@@ -192,7 +214,7 @@ sequence:
               {{ as_timestamp(myforecasts[weather_entity_id]['forecast'][repeat.index].datetime, now()) | timestamp_custom("%Y-%m-%d") }}
             condition: >
               {% set mapped_conditions = {
-                'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'clear',
+                'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'rain',
                 'fog': 'cloudy', 'hail': 'rain', 'lightning': 'rain',
                 'lightning-rainy': 'rain', 'partlycloudy': 'cloudy', 'pouring': 'rain',
                 'rainy': 'rain', 'snowy': 'snow', 'snowy-rainy': 'snow',

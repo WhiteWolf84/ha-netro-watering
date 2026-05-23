@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -371,11 +370,7 @@ class NetroSensor(CoordinatorEntity[NetroSensorUpdateCoordinator], SensorEntity)
                 else None
             ),
             "last active date": (
-                dt_util.as_local(
-                    self.coordinator.metadata.last_active_date.replace(
-                        tzinfo=datetime.UTC
-                    )
-                )
+                dt_util.as_local(self.coordinator.metadata.last_active_date)
                 if self.coordinator.metadata is not None
                 else None
             ),
@@ -395,11 +390,7 @@ class NetroSensor(CoordinatorEntity[NetroSensorUpdateCoordinator], SensorEntity)
                 else None
             ),
             "token reset": (
-                dt_util.as_local(
-                    self.coordinator.metadata.token_reset_date.replace(
-                        tzinfo=datetime.UTC
-                    )
-                )
+                dt_util.as_local(self.coordinator.metadata.token_reset_date)
                 if self.coordinator.metadata is not None
                 else None
             ),
@@ -460,11 +451,7 @@ class NetroController(
                 else None
             ),
             "last active date": (
-                dt_util.as_local(
-                    self.coordinator.metadata.last_active_date.replace(
-                        tzinfo=datetime.UTC
-                    )
-                )
+                dt_util.as_local(self.coordinator.metadata.last_active_date)
                 if self.coordinator.metadata is not None
                 else None
             ),
@@ -484,11 +471,7 @@ class NetroController(
                 else None
             ),
             "token reset": (
-                dt_util.as_local(
-                    self.coordinator.metadata.token_reset_date.replace(
-                        tzinfo=datetime.UTC
-                    )
-                )
+                dt_util.as_local(self.coordinator.metadata.token_reset_date)
                 if self.coordinator.metadata is not None
                 else None
             ),
@@ -559,11 +542,7 @@ class NetroZone(CoordinatorEntity[NetroControllerUpdateCoordinator], SensorEntit
                 else None
             ),
             "last active date": (
-                dt_util.as_local(
-                    self.coordinator.metadata.last_active_date.replace(
-                        tzinfo=datetime.UTC
-                    )
-                )
+                dt_util.as_local(self.coordinator.metadata.last_active_date)
                 if self.coordinator.metadata is not None
                 else None
             ),
@@ -583,11 +562,7 @@ class NetroZone(CoordinatorEntity[NetroControllerUpdateCoordinator], SensorEntit
                 else None
             ),
             "token reset": (
-                dt_util.as_local(
-                    self.coordinator.metadata.token_reset_date.replace(
-                        tzinfo=datetime.UTC
-                    )
-                )
+                dt_util.as_local(self.coordinator.metadata.token_reset_date)
                 if self.coordinator.metadata is not None
                 else None
             ),

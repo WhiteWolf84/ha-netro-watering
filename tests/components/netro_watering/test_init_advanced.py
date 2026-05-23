@@ -39,10 +39,7 @@ class TestAsyncSetupAdvanced:
         """Test async_setup with valid API URL."""
         config = {DOMAIN: {"netro_api_url": "https://api.custom-netro.com/v1"}}
 
-        with patch(
-            "custom_components.netro_watering.validators.url", return_value=True
-        ), patch("custom_components.netro_watering.NetroConfig") as mock_config:
-
+        with patch("custom_components.netro_watering.NetroConfig") as mock_config:
             result = await async_setup(hass, config)
 
             assert result is True
