@@ -8,7 +8,6 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/kcofoni/ha-netro-watering/issues",
-  "min_ha_version": "2026.5.0",
   "quality_scale": "silver",
   "requirements": ["pynetro==0.1.5"],
   "version": "2.0.0"
