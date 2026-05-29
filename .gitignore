@@ -1,5 +1,4 @@
-updatefromdev
-**/__pycache*
+__pycache__/
 .venv
 pipfile
 pipfile.lock
@@ -29,3 +28,6 @@ htmlcov/
 .tox/
 .nox/
 .claude/
+
+# Generated knowledge graph
+graphify-out/
