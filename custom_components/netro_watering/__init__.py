@@ -337,7 +337,204 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> bool:  # noqa: C901
+def _get_int_option(
+    sources: tuple,
+    default: int,
+    minimum: int,
+    maximum: int,
+    name: str,
+) -> int:
+    """Pick the first non-None value from ``sources``, coerce to int and clamp.
+
+    Falls back to ``default`` (logging a warning) when the chosen value is
+    missing, not an integer, or outside the ``[minimum, maximum]`` range. This
+    centralizes the option-parsing pattern shared by every config field.
+    """
+    value = next((v for v in sources if v is not None), default)
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        _LOGGER.warning(
+            "The value provided for '%s' is invalid, defaulting to %d", name, default
+        )
+        return default
+    if not minimum <= result <= maximum:
+        _LOGGER.warning(
+            "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
+            name,
+            minimum,
+            maximum,
+            default,
+        )
+        return default
+    return result
+
+
+def _build_slowdown_factors(entry: NetroConfigEntry, gp: dict) -> list | None:
+    """Build the slowdown_factors list from the entry options / global parameters.
+
+    Returns ``None`` when no effective slowdown is configured (multiplier <= 1
+    or missing window bounds), matching the previous inline behavior.
+    """
+    old_sd_factors = entry.options.get(
+        CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS, [])
+    )
+    default_sd_start = "22:00"
+    default_sd_end = "06:00"
+    default_sd_mult = 1
+
+    if isinstance(old_sd_factors, list) and old_sd_factors:
+        first_sd = old_sd_factors[0]
+        default_sd_start = first_sd.get("from", default_sd_start)
+        default_sd_end = first_sd.get("to", default_sd_end)
+        default_sd_mult = first_sd.get("sdf", default_sd_mult)
+
+    sd_start = entry.options.get(CONF_SLOWDOWN_START_TIME, default_sd_start)
+    sd_end = entry.options.get(CONF_SLOWDOWN_END_TIME, default_sd_end)
+    sd_mult = entry.options.get(CONF_SLOWDOWN_MULTIPLIER, default_sd_mult)
+
+    if sd_mult > 1 and sd_start and sd_end:
+        slowdown_factors = [{"from": sd_start, "to": sd_end, "sdf": sd_mult}]
+        prepare_slowdown_factors(slowdown_factors)
+        return slowdown_factors
+    return None
+
+
+async def _setup_sensor_coordinator(
+    hass: HomeAssistant, entry: NetroConfigEntry, gp: dict
+) -> NetroSensorUpdateCoordinator:
+    """Create, first-refresh and return the sensor coordinator for this entry."""
+    sensor_value_days_before_today = _get_int_option(
+        (
+            entry.options.get(CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY),
+            gp.get(CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY),
+            DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
+        ),
+        DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
+        MIN_SENSOR_VALUE_DAYS_BEFORE_TODAY,
+        MAX_SENSOR_VALUE_DAYS_BEFORE_TODAY,
+        CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
+    )
+
+    refresh_interval = _get_int_option(
+        (entry.options.get(CONF_SENS_REFRESH_INTERVAL), SENS_REFRESH_INTERVAL_MN),
+        SENS_REFRESH_INTERVAL_MN,
+        MIN_REFRESH_INTERVAL_MN,
+        MAX_REFRESH_INTERVAL_MN,
+        CONF_SENS_REFRESH_INTERVAL,
+    )
+
+    _LOGGER.debug(
+        "creating sensor coordinator: device_name = %s, refresh_interval = %s, "
+        "sensor_value_days_before_today = %s",
+        entry.data[CONF_DEVICE_NAME],
+        refresh_interval,
+        sensor_value_days_before_today,
+    )
+
+    coordinator = NetroSensorUpdateCoordinator(
+        hass,
+        refresh_interval=refresh_interval,
+        sensor_value_days_before_today=sensor_value_days_before_today,
+        serial_number=entry.data[CONF_SERIAL_NUMBER],
+        device_type=entry.data[CONF_DEVICE_TYPE],
+        device_name=entry.data[CONF_DEVICE_NAME],
+        hw_version=entry.data[CONF_DEVICE_HW_VERSION],
+        sw_version=entry.data[CONF_DEVICE_SW_VERSION],
+    )
+    await coordinator.async_config_entry_first_refresh()
+    return coordinator
+
+
+async def _setup_controller_coordinator(
+    hass: HomeAssistant, entry: NetroConfigEntry, slowdown_factors: list | None
+) -> NetroControllerUpdateCoordinator:
+    """Create the controller coordinator, first-refresh it and register its device."""
+    opt = entry.options
+
+    refresh_interval = _get_int_option(
+        (opt.get(CONF_CTRL_REFRESH_INTERVAL), CTRL_REFRESH_INTERVAL_MN),
+        CTRL_REFRESH_INTERVAL_MN,
+        MIN_REFRESH_INTERVAL_MN,
+        MAX_REFRESH_INTERVAL_MN,
+        CONF_CTRL_REFRESH_INTERVAL,
+    )
+
+    schedules_months_before = _get_int_option(
+        (opt.get(CONF_MONTHS_BEFORE_SCHEDULES), MONTHS_BEFORE_SCHEDULES),
+        MONTHS_BEFORE_SCHEDULES,
+        MIN_MONTHS_BEFORE_SCHEDULES,
+        MAX_MONTHS_BEFORE_SCHEDULES,
+        CONF_MONTHS_BEFORE_SCHEDULES,
+    )
+
+    schedules_months_after = _get_int_option(
+        (opt.get(CONF_MONTHS_AFTER_SCHEDULES), MONTHS_AFTER_SCHEDULES),
+        MONTHS_AFTER_SCHEDULES,
+        MIN_MONTHS_AFTER_SCHEDULES,
+        MAX_MONTHS_AFTER_SCHEDULES,
+        CONF_MONTHS_AFTER_SCHEDULES,
+    )
+
+    _LOGGER.debug(
+        "creating controller: device_name = %s, refresh_interval = %s, "
+        "schedules_months_before = %s, schedules_months_after = %s, slowdown_factors = %s",
+        entry.data[CONF_DEVICE_NAME],
+        refresh_interval,
+        schedules_months_before,
+        schedules_months_after,
+        slowdown_factors,
+    )
+
+    coordinator = NetroControllerUpdateCoordinator(
+        hass,
+        refresh_interval=refresh_interval,
+        slowdown_factors=slowdown_factors,
+        schedules_months_before=schedules_months_before,
+        schedules_months_after=schedules_months_after,
+        serial_number=entry.data[CONF_SERIAL_NUMBER],
+        device_type=entry.data[CONF_DEVICE_TYPE],
+        device_name=entry.data[CONF_DEVICE_NAME],
+        hw_version=entry.data[CONF_DEVICE_HW_VERSION],
+        sw_version=entry.data[CONF_DEVICE_SW_VERSION],
+    )
+    await coordinator.async_config_entry_first_refresh()
+
+    # create device in the device registry
+    # in order to be able to link the zones to the controller
+    # and to have a nice representation of the devices in HA
+    # even if the controller does not have any sensor itself
+    # use serial number as unique identifier
+    serial = coordinator.serial_number
+    name = coordinator.device_name or entry.data.get(CONF_DEVICE_NAME) or serial
+    model = (
+        NETRO_PIXIE_CONTROLLER_MODEL
+        if hasattr(coordinator, NETRO_CONTROLLER_BATTERY_LEVEL)
+        else NETRO_SPRITE_CONTROLLER_MODEL
+    )
+
+    dev_reg = dr.async_get(hass)
+    dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, serial)},
+        manufacturer=MANUFACTURER,
+        name=name,
+        model=model,
+        sw_version=coordinator.sw_version,
+        hw_version=coordinator.hw_version,
+    )
+    _LOGGER.debug(
+        "device explicitly created into the registry: name = %s, serial = %s, "
+        "model = %s, manufacturer = %s",
+        name,
+        mask(serial),
+        model,
+        MANUFACTURER,
+    )
+    return coordinator
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> bool:
     """Set up Netro Watering from a config entry."""
 
     _LOGGER.debug(
@@ -350,272 +547,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> boo
     # access to global parameters
     gp = hass.data.get(DOMAIN, {}).get(GLOBAL_PARAMETERS, {})
 
-    # get parameters any type of device could be interested in
-    import copy
-    
-    old_sd_factors = entry.options.get(CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS, []))
-    default_sd_start = "22:00"
-    default_sd_end = "06:00"
-    default_sd_mult = 1
-    
-    if isinstance(old_sd_factors, list) and len(old_sd_factors) > 0:
-        first_sd = old_sd_factors[0]
-        default_sd_start = first_sd.get("from", default_sd_start)
-        default_sd_end = first_sd.get("to", default_sd_end)
-        default_sd_mult = first_sd.get("sdf", default_sd_mult)
-        
-    sd_start = entry.options.get(CONF_SLOWDOWN_START_TIME, default_sd_start)
-    sd_end = entry.options.get(CONF_SLOWDOWN_END_TIME, default_sd_end)
-    sd_mult = entry.options.get(CONF_SLOWDOWN_MULTIPLIER, default_sd_mult)
+    # build the slowdown factors any controller could be interested in
+    slowdown_factors = _build_slowdown_factors(entry, gp)
 
-    slowdown_factors = None
-    if sd_mult > 1 and sd_start and sd_end:
-        slowdown_factors = [{"from": sd_start, "to": sd_end, "sdf": sd_mult}]
-        prepare_slowdown_factors(slowdown_factors)
-
-
-    if entry.data[CONF_DEVICE_TYPE] == SENSOR_DEVICE_TYPE:
-        # get sensor specific parameters, look first in the options,
-        # next in the global parameters, otherwise use the default value
-        val = next(
-            v
-            for v in (
-                entry.options.get(CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY),
-                gp.get(CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY),
-                DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-            )
-            if v is not None
-        )
-
-        try:
-            sensor_value_days_before_today = int(val)
-        except (TypeError, ValueError):
-            sensor_value_days_before_today = DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-                DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-            )
-
-        if (
-            not MIN_SENSOR_VALUE_DAYS_BEFORE_TODAY
-            <= sensor_value_days_before_today
-            <= MAX_SENSOR_VALUE_DAYS_BEFORE_TODAY
-        ):
-            sensor_value_days_before_today = DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY
-            _LOGGER.warning(
-                "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
-                CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-                MIN_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-                MAX_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-                DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
-            )
-
-        # --- Sensor refresh_interval (minutes, 1..120) ---
-        val = next(
-            v
-            for v in (
-                entry.options.get(CONF_SENS_REFRESH_INTERVAL),
-                SENS_REFRESH_INTERVAL_MN,
-            )
-            if v is not None
-        )
-
-        try:
-            refresh_interval = int(val)
-        except (TypeError, ValueError):
-            refresh_interval = SENS_REFRESH_INTERVAL_MN
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_SENS_REFRESH_INTERVAL,
-                SENS_REFRESH_INTERVAL_MN,
-            )
-
-        if not MIN_REFRESH_INTERVAL_MN <= refresh_interval <= MAX_REFRESH_INTERVAL_MN:
-            refresh_interval = SENS_REFRESH_INTERVAL_MN
-            _LOGGER.warning(
-                "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
-                CONF_SENS_REFRESH_INTERVAL,
-                MIN_REFRESH_INTERVAL_MN,
-                MAX_REFRESH_INTERVAL_MN,
-                SENS_REFRESH_INTERVAL_MN,
-            )
-
-        _LOGGER.debug(
-            "creating sensor coordinator: device_name = %s, refresh_interval = %s, "
-            "sensor_value_days_before_today = %s",
-            entry.data[CONF_DEVICE_NAME],
-            refresh_interval,
-            sensor_value_days_before_today,
-        )
-
-        sensor_coordinator = NetroSensorUpdateCoordinator(
-            hass,
-            refresh_interval=refresh_interval,
-            sensor_value_days_before_today=sensor_value_days_before_today,
-            serial_number=entry.data[CONF_SERIAL_NUMBER],
-            device_type=entry.data[CONF_DEVICE_TYPE],
-            device_name=entry.data[CONF_DEVICE_NAME],
-            hw_version=entry.data[CONF_DEVICE_HW_VERSION],
-            sw_version=entry.data[CONF_DEVICE_SW_VERSION],
-        )
-        await sensor_coordinator.async_config_entry_first_refresh()
-        entry.runtime_data = sensor_coordinator
-        _LOGGER.info("Just created : %s", sensor_coordinator)
-    elif entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
-        opt = entry.options
-
-        # --- refresh_interval (minutes, 1..120) ---
-        val = next(
-            v
-            for v in (opt.get(CONF_CTRL_REFRESH_INTERVAL), CTRL_REFRESH_INTERVAL_MN)
-            if v is not None
-        )
-        try:
-            refresh_interval = int(val)
-        except (TypeError, ValueError):
-            refresh_interval = CTRL_REFRESH_INTERVAL_MN
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_CTRL_REFRESH_INTERVAL,
-                CTRL_REFRESH_INTERVAL_MN,
-            )
-
-        if not MIN_REFRESH_INTERVAL_MN <= refresh_interval <= MAX_REFRESH_INTERVAL_MN:
-            refresh_interval = CTRL_REFRESH_INTERVAL_MN
-            _LOGGER.warning(
-                "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
-                CONF_CTRL_REFRESH_INTERVAL,
-                MIN_REFRESH_INTERVAL_MN,
-                MAX_REFRESH_INTERVAL_MN,
-                CTRL_REFRESH_INTERVAL_MN,
-            )
-
-        # --- schedules_months_before ---
-        val = next(
-            v
-            for v in (opt.get(CONF_MONTHS_BEFORE_SCHEDULES), MONTHS_BEFORE_SCHEDULES)
-            if v is not None
-        )
-        try:
-            schedules_months_before = int(val)
-        except (TypeError, ValueError):
-            schedules_months_before = MONTHS_BEFORE_SCHEDULES
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_MONTHS_BEFORE_SCHEDULES,
-                MONTHS_BEFORE_SCHEDULES,
-            )
-
-        if (
-            not MIN_MONTHS_BEFORE_SCHEDULES
-            <= schedules_months_before
-            <= MAX_MONTHS_BEFORE_SCHEDULES
-        ):
-            schedules_months_before = MONTHS_BEFORE_SCHEDULES
-            _LOGGER.warning(
-                "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
-                CONF_MONTHS_BEFORE_SCHEDULES,
-                MIN_MONTHS_BEFORE_SCHEDULES,
-                MAX_MONTHS_BEFORE_SCHEDULES,
-                MONTHS_BEFORE_SCHEDULES,
-            )
-
-        # --- schedules_months_after ---
-        val = next(
-            v
-            for v in (opt.get(CONF_MONTHS_AFTER_SCHEDULES), MONTHS_AFTER_SCHEDULES)
-            if v is not None
-        )
-        try:
-            schedules_months_after = int(val)
-        except (TypeError, ValueError):
-            schedules_months_after = MONTHS_AFTER_SCHEDULES
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_MONTHS_AFTER_SCHEDULES,
-                MONTHS_AFTER_SCHEDULES,
-            )
-
-        if (
-            not MIN_MONTHS_AFTER_SCHEDULES
-            <= schedules_months_after
-            <= MAX_MONTHS_AFTER_SCHEDULES
-        ):
-            schedules_months_after = MONTHS_AFTER_SCHEDULES
-            _LOGGER.warning(
-                "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
-                CONF_MONTHS_AFTER_SCHEDULES,
-                MIN_MONTHS_AFTER_SCHEDULES,
-                MAX_MONTHS_AFTER_SCHEDULES,
-                MONTHS_AFTER_SCHEDULES,
-            )
-
-        _LOGGER.debug(
-            "creating controller: device_name = %s, refresh_interval = %s, "
-            "schedules_months_before = %s, schedules_months_after = %s, slowdown_factors = %s",
-            entry.data[CONF_DEVICE_NAME],
-            refresh_interval,
-            schedules_months_before,
-            schedules_months_after,
-            slowdown_factors,
-        )
-
-        controller_coordinator = NetroControllerUpdateCoordinator(
-            hass,
-            refresh_interval=refresh_interval,
-            slowdown_factors=slowdown_factors,
-            schedules_months_before=schedules_months_before,
-            schedules_months_after=schedules_months_after,
-            serial_number=entry.data[CONF_SERIAL_NUMBER],
-            device_type=entry.data[CONF_DEVICE_TYPE],
-            device_name=entry.data[CONF_DEVICE_NAME],
-            hw_version=entry.data[CONF_DEVICE_HW_VERSION],
-            sw_version=entry.data[CONF_DEVICE_SW_VERSION],
-        )
-        await controller_coordinator.async_config_entry_first_refresh()
-        entry.runtime_data = controller_coordinator
-
-        # create device in the device registry
-        # in order to be able to link the zones to the controller
-        # and to have a nice representation of the devices in HA
-        # even if the controller does not have any sensor itself
-        # use serial number as unique identifier
-        serial = controller_coordinator.serial_number
-        name = (
-            controller_coordinator.device_name
-            or entry.data.get(CONF_DEVICE_NAME)
-            or serial
-        )
-        model = (
-            NETRO_PIXIE_CONTROLLER_MODEL
-            if hasattr(controller_coordinator, NETRO_CONTROLLER_BATTERY_LEVEL)
-            else NETRO_SPRITE_CONTROLLER_MODEL
-        )
-
-        dev_reg = dr.async_get(hass)
-        dev_reg.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, serial)},
-            manufacturer=MANUFACTURER,
-            name=name,
-            model=model,
-            sw_version=controller_coordinator.sw_version,
-            hw_version=controller_coordinator.hw_version,
-        )
-        _LOGGER.debug(
-            "device explicitly created into the registry: name = %s, serial = %s, "
-            "model = %s, manufacturer = %s",
-            name,
-            mask(serial),
-            model,
-            MANUFACTURER,
-        )
-        _LOGGER.info("Just created : %s", controller_coordinator)
+    device_type = entry.data[CONF_DEVICE_TYPE]
+    if device_type == SENSOR_DEVICE_TYPE:
+        coordinator = await _setup_sensor_coordinator(hass, entry, gp)
+    elif device_type == CONTROLLER_DEVICE_TYPE:
+        coordinator = await _setup_controller_coordinator(hass, entry, slowdown_factors)
     else:
         raise HomeAssistantError(
-            f"Config entry netro device type does not exist: {entry.data[CONF_DEVICE_TYPE]}"
+            f"Config entry netro device type does not exist: {device_type}"
         )
+
+    entry.runtime_data = coordinator
+    _LOGGER.info("Just created : %s", coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

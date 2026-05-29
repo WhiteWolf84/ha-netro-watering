@@ -204,9 +204,9 @@
 # name: TestNetroControllerUpdateCoordinator.test_properties_when_not_initialized
   dict({
     'enabled_error': "'NetroControllerUpdateCoordinator' object has no attribute 'status'",
-    'metadata_error': "'NetroControllerUpdateCoordinator' object has no attribute '_metadata'",
+    'metadata': None,
     'number_of_active_zones': None,
-    'token_remaining_error': "'NetroControllerUpdateCoordinator' object has no attribute '_metadata'",
+    'token_remaining': None,
     'watering_error': "'NetroControllerUpdateCoordinator' object has no attribute 'status'",
   })
 # ---

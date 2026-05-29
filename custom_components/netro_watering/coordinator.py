@@ -158,7 +158,54 @@ class Meta:
         self.token_reset_date = _parse_netro_utc(token_reset)
 
 
-class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
+class NetroUpdateCoordinator(DataUpdateCoordinator):
+    """Base coordinator holding the fields and metadata shared by every Netro device.
+
+    Both the sensor and controller coordinators store the same device identity
+    (serial number, name, versions) and expose the same Netro API ``metadata`` /
+    ``token_remaining``. Centralizing them here removes the duplication and also
+    guarantees ``_metadata`` exists before the first refresh (the controller used
+    to rely on it being assigned in ``_async_update_data``).
+    """
+
+    _metadata: Meta | None = None
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        *,
+        refresh_interval: int,
+        serial_number: str,
+        device_type: str,
+        device_name: str,
+        hw_version: str,
+        sw_version: str,
+    ) -> None:
+        """Initialize the common Netro coordinator state."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=device_name,
+            update_interval=timedelta(minutes=refresh_interval),
+        )
+        self.serial_number = serial_number
+        self.device_type = device_type
+        self.device_name = device_name
+        self.hw_version = hw_version
+        self.sw_version = sw_version
+
+    @property
+    def metadata(self) -> Meta | None:
+        """Return the meta data returned by the last Netro API call."""
+        return self._metadata
+
+    @property
+    def token_remaining(self) -> int | None:
+        """Return the remaining daily API tokens, if known."""
+        return self.metadata.token_remaining if self.metadata is not None else None
+
+
+class NetroSensorUpdateCoordinator(NetroUpdateCoordinator):
     """Coordinator for Netro sensors NPA calls."""
 
     # create the sensor measure attributes in order to prevent AttributeError when not yet initialized
@@ -171,7 +218,6 @@ class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
     time = None
     local_date = None
     local_time = None
-    _metadata = None
 
     def __init__(
         self,
@@ -187,15 +233,13 @@ class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
         """Initialize my sensor coordinator."""
         super().__init__(
             hass,
-            _LOGGER,
-            name=device_name,
-            update_interval=timedelta(minutes=refresh_interval),
+            refresh_interval=refresh_interval,
+            serial_number=serial_number,
+            device_type=device_type,
+            device_name=device_name,
+            hw_version=hw_version,
+            sw_version=sw_version,
         )
-        self.serial_number = serial_number
-        self.device_type = device_type
-        self.device_name = device_name
-        self.hw_version = hw_version
-        self.sw_version = sw_version
         self.sensor_value_days_before_today = sensor_value_days_before_today
 
     @property
@@ -209,18 +253,6 @@ class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
             sw_version=self.sw_version,
             model=NETRO_DEFAULT_SENSOR_MODEL,
         )
-
-    @property
-    def metadata(self) -> Meta | None:
-        """Return the meta data of the sensor."""
-        if self._metadata:
-            return self._metadata
-        return None
-
-    @property
-    def token_remaining(self) -> int | None:
-        """Return the remaining token of the sensor."""
-        return self.metadata.token_remaining if self.metadata is not None else None
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
@@ -289,7 +321,7 @@ class NetroSensorUpdateCoordinator(DataUpdateCoordinator):
         return f'sensor coordinator "{self.name}" ({NETRO_DEFAULT_SENSOR_MODEL})'
 
 
-class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
+class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
     """Coordinator for Netro controllers NPA calls."""
 
     class Zone:
@@ -486,15 +518,13 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
         """Initialize my controller coordinator."""
         super().__init__(
             hass,
-            _LOGGER,
-            name=device_name,
-            update_interval=datetime.timedelta(minutes=refresh_interval),
+            refresh_interval=refresh_interval,
+            serial_number=serial_number,
+            device_type=device_type,
+            device_name=device_name,
+            hw_version=hw_version,
+            sw_version=sw_version,
         )
-        self.serial_number = serial_number
-        self.device_type = device_type
-        self.device_name = device_name
-        self.hw_version = hw_version
-        self.sw_version = sw_version
         self.refresh_interval = refresh_interval
         self.slowdown_factors = slowdown_factors
         self.current_slowdown_factor = (
@@ -607,18 +637,6 @@ class NetroControllerUpdateCoordinator(DataUpdateCoordinator):
         if self._active_zones:
             return len(self._active_zones)
         return None
-
-    @property
-    def metadata(self) -> Meta | None:
-        """Return the meta data of the controller."""
-        if self._metadata:
-            return self._metadata
-        return None
-
-    @property
-    def token_remaining(self) -> int | None:
-        """Return the remaining token of the controller."""
-        return self.metadata.token_remaining if self.metadata is not None else None
 
     def calendar_schedules(
         self,
