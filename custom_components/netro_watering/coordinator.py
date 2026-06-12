@@ -75,10 +75,17 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def prepare_slowdown_factors(slowdown_factor: list) -> list | None:
-    """Convert 'from' and 'to' fields of the slowdown factor table into decimal time value in order to make it usable for getting new possible update interval."""
+    """Convert 'from' and 'to' fields of the slowdown factor table into decimal time value in order to make it usable for getting new possible update interval.
+
+    Idempotent: slots whose bounds are already decimal numbers are left as-is,
+    so a list prepared once (e.g. the YAML globals in async_setup) can safely
+    flow through here again when building per-entry factors.
+    """
     if slowdown_factor is not None:
         # convert hh:mm:ss time string to decimal
-        def hhmm_to_decimal(hhmm: str) -> float:
+        def hhmm_to_decimal(hhmm: str | float) -> float:
+            if isinstance(hhmm, (int, float)):
+                return float(hhmm)
             fields = hhmm.split(":")
             hours = fields[0] if len(fields) > 0 else 0.0
             minutes = fields[1] if len(fields) > 1 else 0.0
@@ -640,8 +647,8 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
 
     def calendar_schedules(
         self,
-        start_date: datetime.date | None = None,
-        end_date: datetime.date | None = None,
+        start_date: datetime.datetime | None = None,
+        end_date: datetime.datetime | None = None,
     ):
         """Return the calendar events of the controller."""
 
@@ -870,7 +877,7 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
             meta_data[NETRO_METADATA_TOKEN_REMAINING],
             meta_data[NETRO_METADATA_TOKEN_RESET],
         )
-        if device_data.get(NETRO_CONTROLLER_BATTERY_LEVEL):
+        if device_data.get(NETRO_CONTROLLER_BATTERY_LEVEL) is not None:
             self.battery_level = device_data[NETRO_CONTROLLER_BATTERY_LEVEL] * 100
 
         # load the actives zones

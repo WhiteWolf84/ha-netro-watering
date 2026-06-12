@@ -38,10 +38,15 @@ from .const import (
     DELAY_BEFORE_REFRESH,
     DOMAIN,
     GLOBAL_PARAMETERS,
+    MAX_DELAY_BEFORE_REFRESH,
+    MAX_WATERING_DELAY,
     MAX_WATERING_DURATION,
+    MIN_DELAY_BEFORE_REFRESH,
+    MIN_WATERING_DELAY,
     MIN_WATERING_DURATION,
 )
 from .coordinator import NetroControllerUpdateCoordinator
+from .helpers import get_int_option
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,89 +135,37 @@ async def async_setup_entry(
         gp = hass.data.get(DOMAIN, {}).get(GLOBAL_PARAMETERS, {})
 
         # get the configuration options we are interested in
-        # default_watering_duration (minutes, 1..120) ---
-        val = next(
-            v
-            for v in (entry.options.get(CONF_DURATION), DEFAULT_WATERING_DURATION)
-            if v is not None
+        default_watering_duration = get_int_option(
+            (entry.options.get(CONF_DURATION), DEFAULT_WATERING_DURATION),
+            DEFAULT_WATERING_DURATION,
+            MIN_WATERING_DURATION,
+            MAX_WATERING_DURATION,
+            CONF_DURATION,
         )
-        try:
-            default_watering_duration = int(val)
-        except (TypeError, ValueError):
-            default_watering_duration = DEFAULT_WATERING_DURATION
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_DURATION,
-                DEFAULT_WATERING_DURATION,
-            )
 
-        if (
-            not MIN_WATERING_DURATION
-            <= default_watering_duration
-            <= MAX_WATERING_DURATION
-        ):
-            default_watering_duration = DEFAULT_WATERING_DURATION
-            _LOGGER.warning(
-                "The value provided for '%s' should not be negative, defaulting to %d",
-                CONF_DURATION,
-                DEFAULT_WATERING_DURATION,
-            )
-
-        # default_watering_delay
-        val = next(
-            v
-            for v in (
+        default_watering_delay = get_int_option(
+            (
                 entry.options.get(CONF_DEFAULT_WATERING_DELAY),
                 gp.get(CONF_DEFAULT_WATERING_DELAY),
                 DEFAULT_WATERING_DELAY,
-            )
-            if v is not None
+            ),
+            DEFAULT_WATERING_DELAY,
+            MIN_WATERING_DELAY,
+            MAX_WATERING_DELAY,
+            CONF_DEFAULT_WATERING_DELAY,
         )
-        try:
-            default_watering_delay = int(val)
-        except (TypeError, ValueError):
-            default_watering_delay = DEFAULT_WATERING_DELAY
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_DEFAULT_WATERING_DELAY,
-                DEFAULT_WATERING_DELAY,
-            )
 
-        if default_watering_delay < 0:
-            default_watering_delay = DEFAULT_WATERING_DELAY
-            _LOGGER.warning(
-                "The value provided for '%s' should not be negative, defaulting to %d",
-                CONF_DEFAULT_WATERING_DELAY,
-                DEFAULT_WATERING_DELAY,
-            )
-
-        # delay_before_refresh
-        val = next(
-            v
-            for v in (
+        delay_before_refresh = get_int_option(
+            (
                 entry.options.get(CONF_DELAY_BEFORE_REFRESH),
                 gp.get(CONF_DELAY_BEFORE_REFRESH),
                 DELAY_BEFORE_REFRESH,
-            )
-            if v is not None
+            ),
+            DELAY_BEFORE_REFRESH,
+            MIN_DELAY_BEFORE_REFRESH,
+            MAX_DELAY_BEFORE_REFRESH,
+            CONF_DELAY_BEFORE_REFRESH,
         )
-        try:
-            delay_before_refresh = int(val)
-        except (TypeError, ValueError):
-            delay_before_refresh = DELAY_BEFORE_REFRESH
-            _LOGGER.warning(
-                "The value provided for '%s' is invalid, defaulting to %d",
-                CONF_DELAY_BEFORE_REFRESH,
-                DELAY_BEFORE_REFRESH,
-            )
-
-        if delay_before_refresh < 0:
-            delay_before_refresh = DELAY_BEFORE_REFRESH
-            _LOGGER.warning(
-                "The value provided for '%s' should not be negative, defaulting to %d",
-                CONF_DELAY_BEFORE_REFRESH,
-                DELAY_BEFORE_REFRESH,
-            )
 
         _LOGGER.info("Adding switch entities")
         _LOGGER.debug(

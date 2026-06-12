@@ -87,6 +87,7 @@ from .coordinator import (
     NetroSensorUpdateCoordinator,
     prepare_slowdown_factors,
 )
+from .helpers import get_int_option
 from .http_client import AiohttpClient
 
 # Type alias for Netro config entries (HA 2026+ / Python 3.12+)
@@ -258,35 +259,39 @@ class WeatherConditions(enum.Enum):
 
 
 SERVICE_REPORT_WEATHER_NAME = "report_weather"
+# Optional weather fields accept None as "not reported" (vol.Maybe) so that
+# callers templating the payload (e.g. the weather sync blueprint) can pass
+# null when a source sensor/attribute is unavailable instead of fabricating
+# a value; the handler forwards None and pynetro omits it from the request.
 SERVICE_REPORT_WEATHER_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
         vol.Required(ATTR_WEATHER_DATE): cv.date,
-        vol.Optional(ATTR_WEATHER_CONDITION): cv.enum(WeatherConditions),
-        vol.Optional(ATTR_WEATHER_RAIN): cv.positive_float,
-        vol.Optional(ATTR_WEATHER_RAIN_PROB): vol.All(
-            vol.Coerce(int), vol.Range(min=0, max=100)
+        vol.Optional(ATTR_WEATHER_CONDITION): vol.Maybe(cv.enum(WeatherConditions)),
+        vol.Optional(ATTR_WEATHER_RAIN): vol.Maybe(cv.positive_float),
+        vol.Optional(ATTR_WEATHER_RAIN_PROB): vol.Maybe(
+            vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
         ),
-        vol.Optional(ATTR_WEATHER_TEMP): vol.All(
-            vol.Coerce(float), vol.Range(min=-60, max=60)
+        vol.Optional(ATTR_WEATHER_TEMP): vol.Maybe(
+            vol.All(vol.Coerce(float), vol.Range(min=-60, max=60))
         ),
-        vol.Optional(ATTR_WEATHER_T_MIN): vol.All(
-            vol.Coerce(float), vol.Range(min=-60, max=60)
+        vol.Optional(ATTR_WEATHER_T_MIN): vol.Maybe(
+            vol.All(vol.Coerce(float), vol.Range(min=-60, max=60))
         ),
-        vol.Optional(ATTR_WEATHER_T_MAX): vol.All(
-            vol.Coerce(float), vol.Range(min=-60, max=60)
+        vol.Optional(ATTR_WEATHER_T_MAX): vol.Maybe(
+            vol.All(vol.Coerce(float), vol.Range(min=-60, max=60))
         ),
-        vol.Optional(ATTR_WEATHER_T_DEW): vol.All(
-            vol.Coerce(float), vol.Range(min=-60, max=60)
+        vol.Optional(ATTR_WEATHER_T_DEW): vol.Maybe(
+            vol.All(vol.Coerce(float), vol.Range(min=-60, max=60))
         ),
-        vol.Optional(ATTR_WEATHER_WIND_SPEED): vol.All(
-            vol.Coerce(float), vol.Range(min=0, max=111)
+        vol.Optional(ATTR_WEATHER_WIND_SPEED): vol.Maybe(
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=111))
         ),
-        vol.Optional(ATTR_WEATHER_HUMIDITY): vol.All(
-            vol.Coerce(int), vol.Range(min=0, max=100)
+        vol.Optional(ATTR_WEATHER_HUMIDITY): vol.Maybe(
+            vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
         ),
-        vol.Optional(ATTR_WEATHER_PRESSURE): vol.All(
-            vol.Coerce(float), vol.Range(min=850.0, max=1100.0)
+        vol.Optional(ATTR_WEATHER_PRESSURE): vol.Maybe(
+            vol.All(vol.Coerce(float), vol.Range(min=850.0, max=1100.0))
         ),
     }
 )
@@ -311,12 +316,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     # access to configuration.yaml
     if (netro_watering_config := config.get(DOMAIN)) is not None:
-        if netro_watering_config.get("netro_api_url") is not None:
+        if netro_watering_config.get(CONF_API_URL) is not None:
             # URL already validated by CONFIG_SCHEMA via cv.url
-            NetroConfig.default_base_url = netro_watering_config["netro_api_url"]
+            NetroConfig.default_base_url = netro_watering_config[CONF_API_URL]
             _LOGGER.info(
                 "Set Netro Public API url to %s",
-                netro_watering_config["netro_api_url"],
+                netro_watering_config[CONF_API_URL],
             )
 
     # set global config into the integration shared space
@@ -335,39 +340,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     # Return boolean to indicate that initialization was successful.
     return True
-
-
-def _get_int_option(
-    sources: tuple,
-    default: int,
-    minimum: int,
-    maximum: int,
-    name: str,
-) -> int:
-    """Pick the first non-None value from ``sources``, coerce to int and clamp.
-
-    Falls back to ``default`` (logging a warning) when the chosen value is
-    missing, not an integer, or outside the ``[minimum, maximum]`` range. This
-    centralizes the option-parsing pattern shared by every config field.
-    """
-    value = next((v for v in sources if v is not None), default)
-    try:
-        result = int(value)
-    except (TypeError, ValueError):
-        _LOGGER.warning(
-            "The value provided for '%s' is invalid, defaulting to %d", name, default
-        )
-        return default
-    if not minimum <= result <= maximum:
-        _LOGGER.warning(
-            "The value provided for '%s' is out of range [%d..%d], defaulting to %d",
-            name,
-            minimum,
-            maximum,
-            default,
-        )
-        return default
-    return result
 
 
 def _build_slowdown_factors(entry: NetroConfigEntry, gp: dict) -> list | None:
@@ -404,7 +376,7 @@ async def _setup_sensor_coordinator(
     hass: HomeAssistant, entry: NetroConfigEntry, gp: dict
 ) -> NetroSensorUpdateCoordinator:
     """Create, first-refresh and return the sensor coordinator for this entry."""
-    sensor_value_days_before_today = _get_int_option(
+    sensor_value_days_before_today = get_int_option(
         (
             entry.options.get(CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY),
             gp.get(CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY),
@@ -416,7 +388,7 @@ async def _setup_sensor_coordinator(
         CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
     )
 
-    refresh_interval = _get_int_option(
+    refresh_interval = get_int_option(
         (entry.options.get(CONF_SENS_REFRESH_INTERVAL), SENS_REFRESH_INTERVAL_MN),
         SENS_REFRESH_INTERVAL_MN,
         MIN_REFRESH_INTERVAL_MN,
@@ -452,7 +424,7 @@ async def _setup_controller_coordinator(
     """Create the controller coordinator, first-refresh it and register its device."""
     opt = entry.options
 
-    refresh_interval = _get_int_option(
+    refresh_interval = get_int_option(
         (opt.get(CONF_CTRL_REFRESH_INTERVAL), CTRL_REFRESH_INTERVAL_MN),
         CTRL_REFRESH_INTERVAL_MN,
         MIN_REFRESH_INTERVAL_MN,
@@ -460,7 +432,7 @@ async def _setup_controller_coordinator(
         CONF_CTRL_REFRESH_INTERVAL,
     )
 
-    schedules_months_before = _get_int_option(
+    schedules_months_before = get_int_option(
         (opt.get(CONF_MONTHS_BEFORE_SCHEDULES), MONTHS_BEFORE_SCHEDULES),
         MONTHS_BEFORE_SCHEDULES,
         MIN_MONTHS_BEFORE_SCHEDULES,
@@ -468,7 +440,7 @@ async def _setup_controller_coordinator(
         CONF_MONTHS_BEFORE_SCHEDULES,
     )
 
-    schedules_months_after = _get_int_option(
+    schedules_months_after = get_int_option(
         (opt.get(CONF_MONTHS_AFTER_SCHEDULES), MONTHS_AFTER_SCHEDULES),
         MONTHS_AFTER_SCHEDULES,
         MIN_MONTHS_AFTER_SCHEDULES,
@@ -627,11 +599,14 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
                 )
 
             # retrieve the config entry related to this device
+            config_entry = None
             for entry_id in device_entry.config_entries:
-                if (entry := hass.config_entries.async_get_entry(entry_id)) is None:
+                if (
+                    candidate := hass.config_entries.async_get_entry(entry_id)
+                ) is None:
                     continue
-                if entry.domain == DOMAIN:
-                    config_entry = entry
+                if candidate.domain == DOMAIN:
+                    config_entry = candidate
                     break
             if config_entry is None:
                 raise HomeAssistantError(
@@ -640,6 +615,7 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
 
             # get serial number and zone_id
             key = config_entry.data[CONF_SERIAL_NUMBER]
+            zone_id = None
             for identifier in device_entry.identifiers:
                 if identifier[1].startswith(key):
                     # assume that device info returned by Zone class is
@@ -650,6 +626,10 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
                             f"Could not extract a zone number from identifier '{identifier[1]}'"
                         )
                     break
+            if zone_id is None:
+                raise HomeAssistantError(
+                    f"Cannot find a zone identifier for device ID: {device_id}"
+                )
 
             # set moisture by Netro
             _LOGGER.info(
@@ -671,56 +651,16 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
 
     async def report_weather(call: ServiceCall) -> None:
         weather_asof: date = call.data[ATTR_WEATHER_DATE]
-        weather_condition = (
-            call.data[ATTR_WEATHER_CONDITION]
-            if call.data.get(ATTR_WEATHER_CONDITION) is not None
-            else None
-        )
-        weather_rain = (
-            call.data[ATTR_WEATHER_RAIN]
-            if call.data.get(ATTR_WEATHER_RAIN) is not None
-            else None
-        )
-        weather_rain_prob = (
-            call.data[ATTR_WEATHER_RAIN_PROB]
-            if call.data.get(ATTR_WEATHER_RAIN_PROB) is not None
-            else None
-        )
-        weather_temp = (
-            call.data[ATTR_WEATHER_TEMP]
-            if call.data.get(ATTR_WEATHER_TEMP) is not None
-            else None
-        )
-        weather_t_min = (
-            call.data[ATTR_WEATHER_T_MIN]
-            if call.data.get(ATTR_WEATHER_T_MIN) is not None
-            else None
-        )
-        weather_t_max = (
-            call.data[ATTR_WEATHER_T_MAX]
-            if call.data.get(ATTR_WEATHER_T_MAX) is not None
-            else None
-        )
-        weather_t_dew = (
-            call.data[ATTR_WEATHER_T_DEW]
-            if call.data.get(ATTR_WEATHER_T_DEW) is not None
-            else None
-        )
-        weather_wind_speed = (
-            call.data[ATTR_WEATHER_WIND_SPEED]
-            if call.data.get(ATTR_WEATHER_WIND_SPEED) is not None
-            else None
-        )
-        weather_humidity = (
-            call.data[ATTR_WEATHER_HUMIDITY]
-            if call.data.get(ATTR_WEATHER_HUMIDITY) is not None
-            else None
-        )
-        weather_pressure = (
-            call.data[ATTR_WEATHER_PRESSURE]
-            if call.data.get(ATTR_WEATHER_PRESSURE) is not None
-            else None
-        )
+        weather_condition = call.data.get(ATTR_WEATHER_CONDITION)
+        weather_rain = call.data.get(ATTR_WEATHER_RAIN)
+        weather_rain_prob = call.data.get(ATTR_WEATHER_RAIN_PROB)
+        weather_temp = call.data.get(ATTR_WEATHER_TEMP)
+        weather_t_min = call.data.get(ATTR_WEATHER_T_MIN)
+        weather_t_max = call.data.get(ATTR_WEATHER_T_MAX)
+        weather_t_dew = call.data.get(ATTR_WEATHER_T_DEW)
+        weather_wind_speed = call.data.get(ATTR_WEATHER_WIND_SPEED)
+        weather_humidity = call.data.get(ATTR_WEATHER_HUMIDITY)
+        weather_pressure = call.data.get(ATTR_WEATHER_PRESSURE)
 
         # get serial number
         entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
@@ -747,9 +687,7 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
                 "t_max": weather_t_max,
                 "t_dew": weather_t_dew,
                 "wind_speed": weather_wind_speed,
-                "humidity": (
-                    int(weather_humidity) if weather_humidity else weather_humidity
-                ),
+                "humidity": weather_humidity,
                 "pressure": weather_pressure,
             },
         )

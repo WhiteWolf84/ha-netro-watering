@@ -23,7 +23,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     CONF_DEVICE_TYPE,
     CONTROLLER_DEVICE_TYPE,
-    DOMAIN,
     EXTRA_STATE_ATTRIBUTE_SEP_LEFT,
     EXTRA_STATE_ATTRIBUTE_SEP_RIGHT,
     NETRO_CONTROLLER_BATTERY_LEVEL,

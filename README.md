@@ -111,6 +111,8 @@ netro_watering:
 
 This blueprint allows you to synchronize your **Netro smart watering** system with current weather conditions using Home Assistant data. It dynamically adjusts watering schedules to prevent watering during rain or when humidity is high, helping you save water efficiently.
 
+📖 **Full documentation** — inputs, override logic, unit conversions, API token usage and troubleshooting: [blueprints/script/kcofoni/README.md](blueprints/script/kcofoni/README.md)
+
 ### Installation (Import the Blueprint)
 
 You can easily import this blueprint into your Home Assistant instance.

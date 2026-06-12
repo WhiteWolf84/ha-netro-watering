@@ -77,50 +77,30 @@ class AiohttpClient:
 
     def get(self, url: str, **kwargs) -> AsyncHTTPResponse:
         """Make GET request."""
-        if not self._session:
-            raise RuntimeError(
-                "Session not initialized. Use 'async with' context manager."
-            )
-        log_kwargs = _mask_key_in_kwargs(kwargs)
-        _LOGGER.debug("HTTP GET %s params=%s", url, log_kwargs)
-        aiohttp_kwargs = self._adapt_kwargs(kwargs)
-        response = self._session.get(url, **aiohttp_kwargs)
-        return AiohttpResponseContextManager(response)
+        return self._request("get", url, **kwargs)
 
     def post(self, url: str, **kwargs) -> AsyncHTTPResponse:
         """Make POST request."""
-        if not self._session:
-            raise RuntimeError(
-                "Session not initialized. Use 'async with' context manager."
-            )
-        log_kwargs = _mask_key_in_kwargs(kwargs)
-        _LOGGER.debug("HTTP POST %s params=%s", url, log_kwargs)
-        aiohttp_kwargs = self._adapt_kwargs(kwargs)
-        response = self._session.post(url, **aiohttp_kwargs)
-        return AiohttpResponseContextManager(response)
+        return self._request("post", url, **kwargs)
 
     def put(self, url: str, **kwargs) -> AsyncHTTPResponse:
         """Make PUT request."""
-        if not self._session:
-            raise RuntimeError(
-                "Session not initialized. Use 'async with' context manager."
-            )
-        log_kwargs = _mask_key_in_kwargs(kwargs)
-        _LOGGER.debug("HTTP PUT %s params=%s", url, log_kwargs)
-        aiohttp_kwargs = self._adapt_kwargs(kwargs)
-        response = self._session.put(url, **aiohttp_kwargs)
-        return AiohttpResponseContextManager(response)
+        return self._request("put", url, **kwargs)
 
     def delete(self, url: str, **kwargs) -> AsyncHTTPResponse:
         """Make DELETE request."""
+        return self._request("delete", url, **kwargs)
+
+    def _request(self, method: str, url: str, **kwargs) -> AsyncHTTPResponse:
+        """Make an HTTP request, logging it (with Netro keys masked)."""
         if not self._session:
             raise RuntimeError(
                 "Session not initialized. Use 'async with' context manager."
             )
         log_kwargs = _mask_key_in_kwargs(kwargs)
-        _LOGGER.debug("HTTP DELETE %s params=%s", url, log_kwargs)
+        _LOGGER.debug("HTTP %s %s params=%s", method.upper(), url, log_kwargs)
         aiohttp_kwargs = self._adapt_kwargs(kwargs)
-        response = self._session.delete(url, **aiohttp_kwargs)
+        response = getattr(self._session, method)(url, **aiohttp_kwargs)
         return AiohttpResponseContextManager(response)
 
     def _adapt_kwargs(self, kwargs: dict[str, Any]) -> dict[str, Any]:

@@ -340,7 +340,7 @@ class TestAsyncSetupEntryParameterValidation:
             "custom_components.netro_watering._async_register_services",
             new_callable=AsyncMock,
         ), patch(
-            "custom_components.netro_watering._LOGGER"
+            "custom_components.netro_watering.helpers._LOGGER"
         ) as mock_logger:
 
             mock_coordinator = AsyncMock()
@@ -382,7 +382,7 @@ class TestAsyncSetupEntryParameterValidation:
             "custom_components.netro_watering._async_register_services",
             new_callable=AsyncMock,
         ), patch(
-            "custom_components.netro_watering._LOGGER"
+            "custom_components.netro_watering.helpers._LOGGER"
         ) as mock_logger:
 
             mock_coordinator = AsyncMock()

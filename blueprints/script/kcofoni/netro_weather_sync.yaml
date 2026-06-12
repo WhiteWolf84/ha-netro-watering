@@ -4,12 +4,14 @@ blueprint:
     Synchronizes weather data from a weather entity to a Netro controller.
     This script retrieves daily weather forecasts and transmits them to the controller
     to optimize watering schedules.
-    For today, real-time station sensors (if configured) override ARPAE forecasts.
-  
+    For today, real-time station sensors (if configured) override the forecast values.
+    Fields that cannot be determined (missing attribute, unavailable sensor) are
+    simply not reported to Netro instead of sending made-up values.
+
   source_url: https://github.com/kcofoni/ha-netro-watering/blob/main/blueprints/script/kcofoni/netro_weather_sync.yaml
-  
+
   domain: script
-  
+
   input:
     netro_controller:
       name: Netro Controller
@@ -17,14 +19,14 @@ blueprint:
       selector:
         config_entry:
           integration: netro_watering
-          
+
     weather_entity:
       name: Weather Entity
       description: Select the source weather entity (e.g. weather.stazione_meteocarpi)
       selector:
         entity:
           domain: weather
-          
+
     rain_probability_entity:
       name: Rain Probability Entity (Optional)
       description: Sensor entity for rain probability if available
@@ -91,7 +93,17 @@ sequence:
     data:
       type: daily
     response_variable: myforecasts
-    
+
+  - alias: "Stop if the weather entity returned no daily forecast"
+    condition: template
+    value_template: >
+      {{ (myforecasts.get(weather_entity_id, {}).get('forecast') or []) | length > 0 }}
+
+  - alias: "Shortcut variables"
+    variables:
+      forecast_list: "{{ myforecasts[weather_entity_id]['forecast'] }}"
+      today_forecast: "{{ myforecasts[weather_entity_id]['forecast'][0] }}"
+
   - alias: "Sync today's weather (station data overrides forecasts)"
     action: netro_watering.report_weather
     data:
@@ -106,112 +118,114 @@ sequence:
           'rainy': 'rain', 'snowy': 'snow', 'snowy-rainy': 'snow',
           'sunny': 'clear', 'windy': 'wind', 'windy-variant': 'wind'
         } %}
-        {% set current_condition = states(weather_entity_id) %}
-        {{ mapped_conditions.get(current_condition, 'clear') }}
+        {{ mapped_conditions.get(states(weather_entity_id)) }}
       rain: >
-        {% set forecast_rain = myforecasts[weather_entity_id]['forecast'][0].precipitation | default(0) | float(0) %}
-        {% if rain_today_entity != "" %}
+        {% set forecast_rain = today_forecast.get('precipitation') | float(0) %}
+        {% if rain_today_entity != "" and has_value(rain_today_entity) %}
           {% set sensor_rain = states(rain_today_entity) | float(0) %}
-          {% if sensor_rain > forecast_rain %}
-            {{ sensor_rain }}
-          {% elif now().hour >= 20 %}
-            {{ sensor_rain }}
-          {% else %}
-            {{ forecast_rain }}
-          {% endif %}
+          {{ sensor_rain if (sensor_rain > forecast_rain or now().hour >= 20)
+             else forecast_rain }}
         {% else %}
           {{ forecast_rain }}
         {% endif %}
       t_min: >
-        {% set forecast_min = myforecasts[weather_entity_id]['forecast'][0].templow | float %}
-        {% if temp_min_entity != "" %}
-          {% set sensor_min = states(temp_min_entity) | float %}
-          {% if sensor_min < forecast_min %}
-            {{ sensor_min }}
-          {% elif now().hour >= 10 %}
-            {{ sensor_min }}
-          {% else %}
-            {{ forecast_min }}
-          {% endif %}
+        {% set forecast_min = today_forecast.get('templow') %}
+        {% set sensor_min = states(temp_min_entity) | float(none)
+           if (temp_min_entity != "" and has_value(temp_min_entity)) else none %}
+        {% if sensor_min is not none and (forecast_min is none
+           or sensor_min < forecast_min or now().hour >= 10) %}
+          {{ sensor_min }}
         {% else %}
           {{ forecast_min }}
         {% endif %}
       t_max: >
-        {% set forecast_max = myforecasts[weather_entity_id]['forecast'][0].temperature | float %}
-        {% if temp_max_entity != "" %}
-          {% set sensor_max = states(temp_max_entity) | float %}
-          {% if sensor_max > forecast_max %}
-            {{ sensor_max }}
-          {% elif now().hour >= 20 %}
-            {{ sensor_max }}
-          {% else %}
-            {{ forecast_max }}
-          {% endif %}
+        {% set forecast_max = today_forecast.get('temperature') %}
+        {% set sensor_max = states(temp_max_entity) | float(none)
+           if (temp_max_entity != "" and has_value(temp_max_entity)) else none %}
+        {% if sensor_max is not none and (forecast_max is none
+           or sensor_max > forecast_max or now().hour >= 20) %}
+          {{ sensor_max }}
         {% else %}
           {{ forecast_max }}
         {% endif %}
       humidity: >
         {{ state_attr(weather_entity_id, 'humidity') }}
       rain_prob: >
-        {% if rain_prob_entity != "" %}
+        {% if rain_prob_entity != "" and has_value(rain_prob_entity) %}
           {{ states(rain_prob_entity) | int(0) }}
-        {% elif myforecasts[weather_entity_id]['forecast'][0].precipitation_probability is defined %}
-          {{ myforecasts[weather_entity_id]['forecast'][0].precipitation_probability | int(0) }}
         {% else %}
-          0
+          {{ today_forecast.get('precipitation_probability') }}
         {% endif %}
       temp: >
-        {% set forecast_min = myforecasts[weather_entity_id]['forecast'][0].templow | float(0) %}
-        {% set final_min = forecast_min %}
-        {% if temp_min_entity != "" %}
-          {% set sensor_min = states(temp_min_entity) | float(0) %}
-          {% set final_min = sensor_min if (sensor_min < forecast_min or now().hour >= 10) else forecast_min %}
-        {% endif %}
-        {% set forecast_max = myforecasts[weather_entity_id]['forecast'][0].temperature | float(0) %}
-        {% set final_max = forecast_max %}
-        {% if temp_max_entity != "" %}
-          {% set sensor_max = states(temp_max_entity) | float(0) %}
-          {% set final_max = sensor_max if (sensor_max > forecast_max or now().hour >= 20) else forecast_max %}
-        {% endif %}
-        {{ ((final_min + final_max) / 2) | round(1) }}
-      wind_speed: >
-        {% set ws = state_attr(weather_entity_id, 'wind_speed') | float(0) %}
-        {% set unit = state_attr(weather_entity_id, 'wind_speed_unit') | default('km/h') %}
-        {% if unit == 'm/s' %}
-          {{ ws | round(2) }}
-        {% elif unit == 'mph' %}
-          {{ (ws * 0.44704) | round(2) }}
-        {% elif unit == 'ft/s' %}
-          {{ (ws * 0.3048) | round(2) }}
+        {% set forecast_min = today_forecast.get('templow') %}
+        {% set sensor_min = states(temp_min_entity) | float(none)
+           if (temp_min_entity != "" and has_value(temp_min_entity)) else none %}
+        {% set final_min = sensor_min if (sensor_min is not none and (forecast_min is none
+           or sensor_min < forecast_min or now().hour >= 10)) else forecast_min %}
+        {% set forecast_max = today_forecast.get('temperature') %}
+        {% set sensor_max = states(temp_max_entity) | float(none)
+           if (temp_max_entity != "" and has_value(temp_max_entity)) else none %}
+        {% set final_max = sensor_max if (sensor_max is not none and (forecast_max is none
+           or sensor_max > forecast_max or now().hour >= 20)) else forecast_max %}
+        {% if final_min is not none and final_max is not none %}
+          {{ ((final_min + final_max) / 2) | round(1) }}
         {% else %}
-          {{ (ws / 3.6) | round(2) }}
+          {{ none }}
+        {% endif %}
+      wind_speed: >
+        {% set ws = state_attr(weather_entity_id, 'wind_speed') %}
+        {% if ws is none %}
+          {{ none }}
+        {% else %}
+          {% set ws = ws | float(0) %}
+          {% set unit = state_attr(weather_entity_id, 'wind_speed_unit') | default('km/h', true) %}
+          {% if unit == 'm/s' %}
+            {{ ws | round(2) }}
+          {% elif unit == 'mph' %}
+            {{ (ws * 0.44704) | round(2) }}
+          {% elif unit == 'ft/s' %}
+            {{ (ws * 0.3048) | round(2) }}
+          {% elif unit == 'kn' %}
+            {{ (ws * 0.514444) | round(2) }}
+          {% else %}
+            {{ (ws / 3.6) | round(2) }}
+          {% endif %}
         {% endif %}
       pressure: >
-        {% set p = state_attr(weather_entity_id, 'pressure') | float(0) %}
-        {% set unit = state_attr(weather_entity_id, 'pressure_unit') | default('hPa') %}
-        {% if unit in ['hPa', 'mbar'] %}
-          {{ p | round(1) }}
-        {% elif unit == 'inHg' %}
-          {{ (p * 33.8639) | round(1) }}
-        {% elif unit == 'mmHg' %}
-          {{ (p * 1.33322) | round(1) }}
-        {% elif unit == 'kPa' %}
-          {{ (p * 10) | round(1) }}
+        {% set p = state_attr(weather_entity_id, 'pressure') %}
+        {% if p is none %}
+          {{ none }}
         {% else %}
-          {{ p | round(1) }}
+          {% set p = p | float(0) %}
+          {% set unit = state_attr(weather_entity_id, 'pressure_unit') | default('hPa', true) %}
+          {% if unit in ['hPa', 'mbar'] %}
+            {{ p | round(1) }}
+          {% elif unit == 'inHg' %}
+            {{ (p * 33.8639) | round(1) }}
+          {% elif unit == 'mmHg' %}
+            {{ (p * 1.33322) | round(1) }}
+          {% elif unit == 'kPa' %}
+            {{ (p * 10) | round(1) }}
+          {% elif unit == 'psi' %}
+            {{ (p * 68.9476) | round(1) }}
+          {% else %}
+            {{ p | round(1) }}
+          {% endif %}
         {% endif %}
       t_dew: >
         {{ state_attr(weather_entity_id, 'dew_point') }}
-        
+
   - alias: "Sync forecast days"
     repeat:
-      count: "{{ [number_of_days_forecast, myforecasts[weather_entity_id]['forecast'] | length - 1] | min }}"
+      count: "{{ [number_of_days_forecast | default(4), forecast_list | length - 1] | min }}"
       sequence:
+        - variables:
+            day_forecast: "{{ forecast_list[repeat.index] }}"
         - action: netro_watering.report_weather
           data:
             config_entry_id: "{{ config_entry_controller }}"
             date: >
-              {{ as_timestamp(myforecasts[weather_entity_id]['forecast'][repeat.index].datetime, now()) | timestamp_custom("%Y-%m-%d") }}
+              {{ as_timestamp(day_forecast.get('datetime'), now()) | timestamp_custom("%Y-%m-%d") }}
             condition: >
               {% set mapped_conditions = {
                 'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'rain',
@@ -220,24 +234,15 @@ sequence:
                 'rainy': 'rain', 'snowy': 'snow', 'snowy-rainy': 'snow',
                 'sunny': 'clear', 'windy': 'wind', 'windy-variant': 'wind'
               } %}
-              {% set current_condition = myforecasts[weather_entity_id]['forecast'][repeat.index].condition %}
-              {{ mapped_conditions.get(current_condition, 'clear') }}
+              {{ mapped_conditions.get(day_forecast.get('condition')) }}
             rain: >
-              {% if myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation is defined %}
-                {{ myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation }}
-              {% else %}
-                0
-              {% endif %}
+              {{ day_forecast.get('precipitation') | float(none) }}
             t_min: >
-              {{ myforecasts[weather_entity_id]['forecast'][repeat.index].templow }}
+              {{ day_forecast.get('templow') }}
             t_max: >
-              {{ myforecasts[weather_entity_id]['forecast'][repeat.index].temperature }}
+              {{ day_forecast.get('temperature') }}
             rain_prob: >
-              {% if myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation_probability is defined %}
-                {{ myforecasts[weather_entity_id]['forecast'][repeat.index].precipitation_probability | int(0) }}
-              {% else %}
-                50
-              {% endif %}
+              {{ day_forecast.get('precipitation_probability') }}
 
 mode: single
 icon: mdi:cloud-arrow-down-outline
