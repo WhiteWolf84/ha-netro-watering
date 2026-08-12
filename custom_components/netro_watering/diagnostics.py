@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import homeassistant.helpers.device_registry as dr
-import homeassistant.helpers.entity_registry as er
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+import homeassistant.helpers.device_registry as dr
+import homeassistant.helpers.entity_registry as er
 
 from .const import CONF_SERIAL_NUMBER, DOMAIN
 
@@ -37,7 +37,7 @@ def _safe(obj: Any) -> Any:
     try:
         # Try a shallow conversion (e.g., attrs/pydantic-like)
         return dict(obj)  # type: ignore[arg-type]
-    except Exception:  # noqa: BLE001 pylint: disable=broad-except
+    except Exception:
         return str(obj)
 
 
@@ -89,25 +89,19 @@ async def async_get_config_entry_diagnostics(
     serial_secrets: set[str] = set()
 
     # From config entry data
-    try:
-        ce_serial = entry.data.get(CONF_SERIAL_NUMBER)
-        if isinstance(ce_serial, (str, int)):
-            serial_secrets.add(str(ce_serial))
-    except Exception:  # noqa: BLE001 pylint: disable=broad-except
-        pass
+    ce_serial = entry.data.get(CONF_SERIAL_NUMBER)
+    if isinstance(ce_serial, (str, int)):
+        serial_secrets.add(str(ce_serial))
 
     # From coordinator attribute
-    try:
-        coord_serial = getattr(coordinator, "serial_number", None)
-        if isinstance(coord_serial, (str, int)):
-            serial_secrets.add(str(coord_serial))
-    except Exception:  # noqa: BLE001 pylint: disable=broad-except
-        pass
+    coord_serial = getattr(coordinator, "serial_number", None)
+    if isinstance(coord_serial, (str, int)):
+        serial_secrets.add(str(coord_serial))
 
     # From device registry identifiers (DOMAIN, serial-like identifiers)
     device_registry = dr.async_get(hass)
     for dev in device_registry.devices.values():
-        if entry.entry_id not in dev.config_entries:
+        if dev.config_entry_id != entry.entry_id:
             continue
         for dom, ident in dev.identifiers:
             if dom == DOMAIN and isinstance(ident, (str, int)):
@@ -156,7 +150,7 @@ async def async_get_config_entry_diagnostics(
 
     devices = []
     for dev in device_registry.devices.values():
-        if entry.entry_id not in dev.config_entries:
+        if dev.config_entry_id != entry.entry_id:
             continue
         # Keep only devices owned by this domain for a compact report
         if not any(idt[0] == DOMAIN for idt in dev.identifiers):

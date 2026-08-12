@@ -2,10 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UNDEFINED
+import pytest
 
 from custom_components.netro_watering.button import (
     NETRO_CONTROLLER_BUTTON_DESCRIPTION,
@@ -124,12 +125,12 @@ class TestButtonAsyncSetupEntry:
     async def test_button_entity_description_properties(self):
         """Test that NETRO_CONTROLLER_BUTTON_DESCRIPTION has correct properties."""
         assert NETRO_CONTROLLER_BUTTON_DESCRIPTION.key == "refresh"
-        assert NETRO_CONTROLLER_BUTTON_DESCRIPTION.name == "Refresh"
+        assert NETRO_CONTROLLER_BUTTON_DESCRIPTION.name is UNDEFINED
         assert (
             NETRO_CONTROLLER_BUTTON_DESCRIPTION.entity_registry_enabled_default is True
         )
         assert NETRO_CONTROLLER_BUTTON_DESCRIPTION.translation_key == "refresh"
-        assert NETRO_CONTROLLER_BUTTON_DESCRIPTION.icon == "mdi:refresh"
+        assert NETRO_CONTROLLER_BUTTON_DESCRIPTION.icon is None
 
 
 class TestNetroRefreshButton:

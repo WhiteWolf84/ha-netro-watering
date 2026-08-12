@@ -2,9 +2,10 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+import pytest
 
 from custom_components.netro_watering import (
     _async_register_services,
@@ -101,7 +102,7 @@ class TestServices:
         device_entry.model = NETRO_DEFAULT_ZONE_MODEL
         device_entry.name = "Test Zone"
         device_entry.identifiers = {(DOMAIN, "CTRL123_1")}
-        device_entry.config_entries = {"test_controller_entry"}
+        device_entry.config_entry_id = "test_controller_entry"
 
         mock_device_registry = MagicMock()
         mock_device_registry.async_get.return_value = device_entry
@@ -109,20 +110,22 @@ class TestServices:
         # Setup coordinator mock
         mock_coordinator = MagicMock()
         mock_hass.data[DOMAIN]["test_controller_entry"] = mock_coordinator
+        mock_controller_entry.state = ConfigEntryState.LOADED
         mock_hass.config_entries.async_get_entry.return_value = mock_controller_entry
 
-        with patch(
-            "custom_components.netro_watering.dr.async_get",
-            return_value=mock_device_registry,
-        ), patch("custom_components.netro_watering.async_get_clientsession"), patch(
-            "custom_components.netro_watering.NetroClient"
-        ) as mock_client_class:
-
+        with (
+            patch(
+                "custom_components.netro_watering.dr.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch("custom_components.netro_watering.async_get_clientsession"),
+            patch("custom_components.netro_watering.NetroClient") as mock_client_class,
+        ):
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
 
             # Register services
-            await _async_register_services(mock_hass, mock_controller_entry)
+            await _async_register_services(mock_hass)
 
             # Verify service was registered
             mock_hass.services.async_register.assert_called()
@@ -137,8 +140,7 @@ class TestServices:
             "custom_components.netro_watering.dr.async_get",
             return_value=mock_device_registry,
         ):
-
-            await _async_register_services(mock_hass, mock_controller_entry)
+            await _async_register_services(mock_hass)
 
             # Get the registered service function
             service_calls = mock_hass.services.async_register.call_args_list
@@ -167,13 +169,14 @@ class TestServices:
         mock_coordinator.name = "Test Device"
         mock_config_entry = MagicMock()
         mock_config_entry.domain = DOMAIN
+        mock_config_entry.state = ConfigEntryState.LOADED
         mock_config_entry.runtime_data = mock_coordinator
         mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
 
-        await _async_register_services(mock_hass, entry)
+        await _async_register_services(mock_hass)
 
         # Get the registered refresh service function
         service_calls = mock_hass.services.async_register.call_args_list
@@ -198,7 +201,7 @@ class TestServices:
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
 
-        await _async_register_services(mock_hass, entry)
+        await _async_register_services(mock_hass)
 
         # Get the registered refresh service function
         service_calls = mock_hass.services.async_register.call_args_list
@@ -246,15 +249,18 @@ class TestAsyncUnloadEntry:
         mock_hass.config_entries.async_unload_platforms.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_async_unload_entry_controller_removes_services(
+    async def test_async_unload_entry_keeps_services(
         self, mock_hass, mock_controller_entry
     ):
-        """Test that controller unload removes services when it's the last controller."""
+        """Unloading the last controller must leave the actions registered.
+
+        They are owned by ``async_setup``, so automations referencing them stay
+        valid; the call itself reports that the entry is not loaded.
+        """
         result = await async_unload_entry(mock_hass, mock_controller_entry)
 
         assert result is True
-        # Should remove services since no other controllers loaded
-        mock_hass.services.async_remove.assert_called()
+        mock_hass.services.async_remove.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_async_unload_entry_failed_unload(

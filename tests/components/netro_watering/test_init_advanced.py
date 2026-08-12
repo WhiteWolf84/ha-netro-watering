@@ -3,10 +3,10 @@
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+import pytest
 
 from custom_components.netro_watering import (
     WeatherConditions,
@@ -71,6 +71,7 @@ class TestAsyncSetupEntry:
             CONF_DEVICE_SW_VERSION: "2.0",
         }
         entry.options = {}
+        entry.unique_id = entry.data[CONF_SERIAL_NUMBER]
         return entry
 
     @pytest.fixture
@@ -86,18 +87,21 @@ class TestAsyncSetupEntry:
             CONF_DEVICE_SW_VERSION: "2.0",
         }
         entry.options = {}
+        entry.unique_id = entry.data[CONF_SERIAL_NUMBER]
         return entry
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_sensor_success(self, mock_hass, mock_sensor_entry):
         """Test successful async_setup_entry for sensor."""
-        with patch(
-            "custom_components.netro_watering.NetroSensorUpdateCoordinator"
-        ) as mock_coordinator_class, patch(
-            "custom_components.netro_watering._async_register_services",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "custom_components.netro_watering.NetroSensorUpdateCoordinator"
+            ) as mock_coordinator_class,
+            patch(
+                "custom_components.netro_watering._async_register_services",
+                new_callable=AsyncMock,
+            ),
         ):
-
             mock_coordinator = AsyncMock()
             mock_coordinator_class.return_value = mock_coordinator
 
@@ -113,15 +117,18 @@ class TestAsyncSetupEntry:
         self, mock_hass, mock_controller_entry
     ):
         """Test successful async_setup_entry for controller."""
-        with patch(
-            "custom_components.netro_watering.NetroControllerUpdateCoordinator"
-        ) as mock_coordinator_class, patch(
-            "custom_components.netro_watering.dr.async_get"
-        ) as mock_device_registry, patch(
-            "custom_components.netro_watering._async_register_services",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "custom_components.netro_watering.NetroControllerUpdateCoordinator"
+            ) as mock_coordinator_class,
+            patch(
+                "custom_components.netro_watering.dr.async_get"
+            ) as mock_device_registry,
+            patch(
+                "custom_components.netro_watering._async_register_services",
+                new_callable=AsyncMock,
+            ),
         ):
-
             mock_coordinator = AsyncMock()
             mock_coordinator.serial_number = "CTRL123"
             mock_coordinator.device_name = "Test Controller"
@@ -149,6 +156,7 @@ class TestAsyncSetupEntry:
             CONF_DEVICE_NAME: "Test Device",
         }
         entry.options = {}
+        entry.unique_id = entry.data[CONF_SERIAL_NUMBER]
 
         with pytest.raises(
             HomeAssistantError, match="Config entry netro device type does not exist"
@@ -175,6 +183,7 @@ class TestServicesAdvanced:
         # Mock config entry with runtime_data (modern HA pattern)
         mock_config_entry = MagicMock()
         mock_config_entry.domain = DOMAIN
+        mock_config_entry.state = ConfigEntryState.LOADED
         mock_config_entry.runtime_data = mock_coordinator
 
         def _get_entry(entry_id):
@@ -195,14 +204,14 @@ class TestServicesAdvanced:
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
 
-        with patch("custom_components.netro_watering.async_get_clientsession"), patch(
-            "custom_components.netro_watering.NetroClient"
-        ) as mock_client_class:
-
+        with (
+            patch("custom_components.netro_watering.async_get_clientsession"),
+            patch("custom_components.netro_watering.NetroClient") as mock_client_class,
+        ):
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
 
-            await _async_register_services(hass, entry)
+            await _async_register_services(hass)
 
             # Get the report_weather service function
             service_calls = hass.services.async_register.call_args_list
@@ -238,7 +247,7 @@ class TestServicesAdvanced:
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
 
-        await _async_register_services(hass, entry)
+        await _async_register_services(hass)
 
         # Get the report_weather service function
         service_calls = hass.services.async_register.call_args_list
@@ -263,7 +272,7 @@ class TestServicesAdvanced:
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
 
-        await _async_register_services(hass, entry)
+        await _async_register_services(hass)
 
         # Get the no_water service function
         service_calls = hass.services.async_register.call_args_list
@@ -292,7 +301,7 @@ class TestServicesAdvanced:
         entry = MagicMock()
         entry.data = {CONF_DEVICE_TYPE: SENSOR_DEVICE_TYPE}
 
-        await _async_register_services(hass, entry)
+        await _async_register_services(hass)
 
         # Get the refresh service function
         service_calls = hass.services.async_register.call_args_list
@@ -330,19 +339,21 @@ class TestAsyncSetupEntryParameterValidation:
             "sensor_value_days_before_today": "invalid_string",
             "sensor_refresh_interval": 999,  # out of range
         }
+        entry.unique_id = entry.data[CONF_SERIAL_NUMBER]
 
         hass.data = {DOMAIN: {"parameters": {}}}
         hass.config_entries.async_forward_entry_setups = AsyncMock()
 
-        with patch(
-            "custom_components.netro_watering.NetroSensorUpdateCoordinator"
-        ) as mock_coordinator_class, patch(
-            "custom_components.netro_watering._async_register_services",
-            new_callable=AsyncMock,
-        ), patch(
-            "custom_components.netro_watering.helpers._LOGGER"
-        ) as mock_logger:
-
+        with (
+            patch(
+                "custom_components.netro_watering.NetroSensorUpdateCoordinator"
+            ) as mock_coordinator_class,
+            patch(
+                "custom_components.netro_watering._async_register_services",
+                new_callable=AsyncMock,
+            ),
+            patch("custom_components.netro_watering.helpers._LOGGER") as mock_logger,
+        ):
             mock_coordinator = AsyncMock()
             mock_coordinator_class.return_value = mock_coordinator
 
@@ -370,21 +381,22 @@ class TestAsyncSetupEntryParameterValidation:
             "schedules_months_before": -5,  # out of range
             "schedules_months_after": 999,  # out of range
         }
+        entry.unique_id = entry.data[CONF_SERIAL_NUMBER]
 
         hass.data = {DOMAIN: {"parameters": {}}}
         hass.config_entries.async_forward_entry_setups = AsyncMock()
 
-        with patch(
-            "custom_components.netro_watering.NetroControllerUpdateCoordinator"
-        ) as mock_coordinator_class, patch(
-            "custom_components.netro_watering.dr.async_get"
-        ), patch(
-            "custom_components.netro_watering._async_register_services",
-            new_callable=AsyncMock,
-        ), patch(
-            "custom_components.netro_watering.helpers._LOGGER"
-        ) as mock_logger:
-
+        with (
+            patch(
+                "custom_components.netro_watering.NetroControllerUpdateCoordinator"
+            ) as mock_coordinator_class,
+            patch("custom_components.netro_watering.dr.async_get"),
+            patch(
+                "custom_components.netro_watering._async_register_services",
+                new_callable=AsyncMock,
+            ),
+            patch("custom_components.netro_watering.helpers._LOGGER") as mock_logger,
+        ):
             mock_coordinator = AsyncMock()
             mock_coordinator.serial_number = "CTRL123"
             mock_coordinator.device_name = "Test Controller"

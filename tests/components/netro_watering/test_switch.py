@@ -2,11 +2,12 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.components.switch import SwitchDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UNDEFINED
+import pytest
 
 from custom_components.netro_watering.const import (
     CONF_DEFAULT_WATERING_DELAY,
@@ -331,18 +332,18 @@ class TestSwitchEntityDescriptions:
         """Test NETRO_WATERING_SWITCH_DESCRIPTION has correct properties."""
         desc = NETRO_WATERING_SWITCH_DESCRIPTION
         assert desc.key == "watering"
-        assert desc.name == "Watering"
+        assert desc.name is None
         assert desc.device_class == SwitchDeviceClass.SWITCH
         assert desc.translation_key == "watering"
         assert desc.netro_on_name == "start_watering"
         assert desc.netro_off_name == "stop_watering"
-        assert desc.icon == "mdi:sprinkler"
+        assert desc.icon is None
 
     def test_netro_enabled_switch_description_properties(self):
         """Test NETRO_ENABLED_SWITCH_DESCRIPTION has correct properties."""
         desc = NETRO_ENABLED_SWITCH_DESCRIPTION
         assert desc.key == "enabled"
-        assert desc.name == "Enabled"
+        assert desc.name is UNDEFINED
         assert desc.device_class == SwitchDeviceClass.SWITCH
         assert desc.translation_key == "enabled"
 

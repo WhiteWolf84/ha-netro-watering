@@ -5,10 +5,13 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.core import HomeAssistant
+from pynetro import NetroException
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.netro_watering.const import (
+    DOMAIN,
     NETRO_STATUS_DISABLE,
     NETRO_STATUS_ENABLE,
 )
@@ -16,6 +19,14 @@ from custom_components.netro_watering.coordinator import (
     NetroControllerUpdateCoordinator,
     NetroSensorUpdateCoordinator,
 )
+
+
+@pytest.fixture
+def netro_config_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Config entry the coordinators under test are attached to."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="coordinator_test_entry")
+    entry.add_to_hass(hass)
+    return entry
 
 
 class TestNetroSensorUpdateCoordinator:
@@ -29,10 +40,11 @@ class TestNetroSensorUpdateCoordinator:
             return json.load(f)
 
     @pytest.fixture
-    def coordinator(self, hass: HomeAssistant):
+    def coordinator(self, hass: HomeAssistant, netro_config_entry):
         """Create a NetroSensorUpdateCoordinator instance for testing."""
         return NetroSensorUpdateCoordinator(
             hass=hass,
+            config_entry=netro_config_entry,
             refresh_interval=30,
             sensor_value_days_before_today=2,
             serial_number="TEST_SENSOR_123",
@@ -262,7 +274,7 @@ class TestNetroSensorUpdateCoordinator:
         ) as mock_client_class:
             # Configure the mock to raise an exception
             mock_client = AsyncMock()
-            mock_client.get_sensor_data.side_effect = Exception("API Error")
+            mock_client.get_sensor_data.side_effect = NetroException(None, "API Error")
             mock_client_class.return_value = mock_client
 
             # Execute the update and expect an exception
@@ -349,10 +361,11 @@ class TestNetroControllerUpdateCoordinator:
             return json.load(f)
 
     @pytest.fixture
-    def controller_coordinator(self, hass: HomeAssistant):
+    def controller_coordinator(self, hass: HomeAssistant, netro_config_entry):
         """Create a NetroControllerUpdateCoordinator instance for testing."""
         return NetroControllerUpdateCoordinator(
             hass=hass,
+            config_entry=netro_config_entry,
             refresh_interval=15,
             slowdown_factors=[
                 {"from": 8.0, "to": 12.0, "sdf": 2},
@@ -379,13 +392,17 @@ class TestNetroControllerUpdateCoordinator:
         # Mock datetime.now() to return a fixed time (13:00) where slowdown_factor = 1
         fixed_time = datetime.datetime(2025, 10, 11, 13, 0, 0)
 
-        with patch(
-            "custom_components.netro_watering.coordinator.NetroClient"
-        ) as mock_client_class, patch(
-            "custom_components.netro_watering.coordinator.datetime"
-        ) as mock_datetime, patch(
-            "custom_components.netro_watering.coordinator.dt_util"
-        ) as mock_dt_util:
+        with (
+            patch(
+                "custom_components.netro_watering.coordinator.NetroClient"
+            ) as mock_client_class,
+            patch(
+                "custom_components.netro_watering.coordinator.datetime"
+            ) as mock_datetime,
+            patch(
+                "custom_components.netro_watering.coordinator.dt_util"
+            ) as mock_dt_util,
+        ):
             # Configure datetime mock
             mock_datetime.datetime.now.return_value = fixed_time
             mock_datetime.timedelta = datetime.timedelta  # Keep timedelta working
@@ -590,11 +607,14 @@ class TestNetroControllerUpdateCoordinator:
 
             # Mock datetime.datetime.now() and dt_util.now() for predictable slowdown factor
             real_datetime = datetime.datetime(2025, 10, 11, 10, 0, 0)
-            with patch(
-                "custom_components.netro_watering.coordinator.datetime"
-            ) as mock_datetime, patch(
-                "custom_components.netro_watering.coordinator.dt_util"
-            ) as mock_dt_util:
+            with (
+                patch(
+                    "custom_components.netro_watering.coordinator.datetime"
+                ) as mock_datetime,
+                patch(
+                    "custom_components.netro_watering.coordinator.dt_util"
+                ) as mock_dt_util,
+            ):
                 mock_datetime.datetime.now.return_value = real_datetime
                 mock_datetime.timedelta = datetime.timedelta  # Keep real timedelta
                 mock_datetime.date = datetime.date  # Keep real date
@@ -625,7 +645,9 @@ class TestNetroControllerUpdateCoordinator:
         ) as mock_client_class:
             # Configure the mock to raise an exception on get_info
             mock_client = AsyncMock()
-            mock_client.get_info.side_effect = Exception("API Error on get_info")
+            mock_client.get_info.side_effect = NetroException(
+                None, "API Error on get_info"
+            )
             mock_client_class.return_value = mock_client
 
             # Execute the update and expect an exception
@@ -700,10 +722,11 @@ class TestNetroControllerActionMethods:
     """Tests for NetroControllerUpdateCoordinator action methods (POST operations)."""
 
     @pytest.fixture
-    def controller_coordinator(self, hass):
+    def controller_coordinator(self, hass, netro_config_entry):
         """Create a NetroControllerUpdateCoordinator for testing action methods."""
         return NetroControllerUpdateCoordinator(
             hass=hass,
+            config_entry=netro_config_entry,
             device_name="Test Controller Actions",
             serial_number="TEST_CONTROLLER_ACTIONS_123",
             refresh_interval=15,
@@ -843,11 +866,12 @@ class TestNetroZoneActionMethods:
     """Tests for NetroControllerUpdateCoordinator.Zone action methods (POST operations)."""
 
     @pytest.fixture
-    def zone_coordinator(self, hass):
+    def zone_coordinator(self, hass, netro_config_entry):
         """Create a Zone for testing action methods."""
         # Create a parent controller first
         parent_controller = NetroControllerUpdateCoordinator(
             hass=hass,
+            config_entry=netro_config_entry,
             device_name="Parent Controller",
             serial_number="PARENT_CONTROLLER_123",
             refresh_interval=15,
@@ -967,11 +991,17 @@ class TestNetroControllerCalendarMethods:
 
     @pytest.fixture
     async def initialized_controller_coordinator(
-        self, hass, controller_info_reference, moistures_reference, schedules_reference
+        self,
+        hass,
+        netro_config_entry,
+        controller_info_reference,
+        moistures_reference,
+        schedules_reference,
     ):
         """Create a fully initialized NetroControllerUpdateCoordinator with real data."""
         coordinator = NetroControllerUpdateCoordinator(
             hass=hass,
+            config_entry=netro_config_entry,
             refresh_interval=15,
             slowdown_factors=[
                 {"from": 8.0, "to": 12.0, "sdf": 2},
@@ -1099,8 +1129,8 @@ class TestNetroControllerCalendarMethods:
     ):
         """Test calendar_schedules filters by date range correctly."""
         # Test with a specific date range (timezone-aware to match schedule data)
-        start_date = datetime.datetime(2025, 9, 1, tzinfo=datetime.timezone.utc)
-        end_date = datetime.datetime(2025, 10, 31, tzinfo=datetime.timezone.utc)
+        start_date = datetime.datetime(2025, 9, 1, tzinfo=datetime.UTC)
+        end_date = datetime.datetime(2025, 10, 31, tzinfo=datetime.UTC)
 
         filtered_schedules = initialized_controller_coordinator.calendar_schedules(
             start_date=start_date, end_date=end_date

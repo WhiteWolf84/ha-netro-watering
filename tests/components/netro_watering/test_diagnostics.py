@@ -2,9 +2,9 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+import pytest
 
 from custom_components.netro_watering.const import CONF_SERIAL_NUMBER, DOMAIN
 from custom_components.netro_watering.diagnostics import (
@@ -192,7 +192,7 @@ class TestDiagnosticsMainFunction:
         device.connections = set()
         device.via_device_id = None
         device.area_id = None
-        device.config_entries = {"test_entry_id"}
+        device.config_entry_id = "test_entry_id"
 
         registry = MagicMock()
         registry.devices = {"device_id": device}
@@ -239,16 +239,19 @@ class TestDiagnosticsMainFunction:
         mock_config_entry.runtime_data = mock_coordinator
         mock_hass.states.get.return_value = mock_state
 
-        with patch(
-            "homeassistant.helpers.device_registry.async_get",
-            return_value=mock_device_registry,
-        ), patch(
-            "homeassistant.helpers.entity_registry.async_get",
-            return_value=mock_entity_registry,
-        ), patch(
-            "custom_components.netro_watering.diagnostics.async_redact_data"
-        ) as mock_redact:
-
+        with (
+            patch(
+                "homeassistant.helpers.device_registry.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch(
+                "homeassistant.helpers.entity_registry.async_get",
+                return_value=mock_entity_registry,
+            ),
+            patch(
+                "custom_components.netro_watering.diagnostics.async_redact_data"
+            ) as mock_redact,
+        ):
             # Mock async_redact_data to return input unchanged for simplicity
             mock_redact.side_effect = lambda data, keys: data
 
@@ -301,16 +304,19 @@ class TestDiagnosticsMainFunction:
         """Test async_get_config_entry_diagnostics without coordinator."""
         # Don't add coordinator to hass.data
 
-        with patch(
-            "homeassistant.helpers.device_registry.async_get",
-            return_value=mock_device_registry,
-        ), patch(
-            "homeassistant.helpers.entity_registry.async_get",
-            return_value=mock_entity_registry,
-        ), patch(
-            "custom_components.netro_watering.diagnostics.async_redact_data"
-        ) as mock_redact:
-
+        with (
+            patch(
+                "homeassistant.helpers.device_registry.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch(
+                "homeassistant.helpers.entity_registry.async_get",
+                return_value=mock_entity_registry,
+            ),
+            patch(
+                "custom_components.netro_watering.diagnostics.async_redact_data"
+            ) as mock_redact,
+        ):
             mock_redact.side_effect = lambda data, keys: data
 
             result = await async_get_config_entry_diagnostics(
@@ -353,16 +359,19 @@ class TestDiagnosticsMainFunction:
         entity_registry = MagicMock()
         entity_registry.entities = {"entity_id": entity}
 
-        with patch(
-            "homeassistant.helpers.device_registry.async_get",
-            return_value=mock_device_registry,
-        ), patch(
-            "homeassistant.helpers.entity_registry.async_get",
-            return_value=entity_registry,
-        ), patch(
-            "custom_components.netro_watering.diagnostics.async_redact_data"
-        ) as mock_redact:
-
+        with (
+            patch(
+                "homeassistant.helpers.device_registry.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch(
+                "homeassistant.helpers.entity_registry.async_get",
+                return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.netro_watering.diagnostics.async_redact_data"
+            ) as mock_redact,
+        ):
             mock_redact.side_effect = lambda data, keys: data
 
             result = await async_get_config_entry_diagnostics(
@@ -380,9 +389,10 @@ class TestDiagnosticsMainFunction:
         mock_hass,
         mock_config_entry,
     ):
-        """Test exception handling in diagnostics collection."""
-        # Setup config entry with problematic data
-        mock_config_entry.data = None  # This might cause exceptions
+        """Diagnostics must still produce a report for a degraded config entry."""
+        # An entry whose data lost its serial number: nothing to scrub, but the
+        # report must still be complete rather than raising.
+        mock_config_entry.data = {}
 
         mock_device_registry = MagicMock()
         mock_device_registry.devices = {}
@@ -390,16 +400,19 @@ class TestDiagnosticsMainFunction:
         mock_entity_registry = MagicMock()
         mock_entity_registry.entities = {}
 
-        with patch(
-            "homeassistant.helpers.device_registry.async_get",
-            return_value=mock_device_registry,
-        ), patch(
-            "homeassistant.helpers.entity_registry.async_get",
-            return_value=mock_entity_registry,
-        ), patch(
-            "custom_components.netro_watering.diagnostics.async_redact_data"
-        ) as mock_redact:
-
+        with (
+            patch(
+                "homeassistant.helpers.device_registry.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch(
+                "homeassistant.helpers.entity_registry.async_get",
+                return_value=mock_entity_registry,
+            ),
+            patch(
+                "custom_components.netro_watering.diagnostics.async_redact_data"
+            ) as mock_redact,
+        ):
             mock_redact.side_effect = lambda data, keys: data
 
             # Should not raise exception despite problematic data
@@ -425,16 +438,19 @@ class TestDiagnosticsMainFunction:
         mock_hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
         mock_hass.states.get.return_value = None  # No state available
 
-        with patch(
-            "homeassistant.helpers.device_registry.async_get",
-            return_value=mock_device_registry,
-        ), patch(
-            "homeassistant.helpers.entity_registry.async_get",
-            return_value=mock_entity_registry,
-        ), patch(
-            "custom_components.netro_watering.diagnostics.async_redact_data"
-        ) as mock_redact:
-
+        with (
+            patch(
+                "homeassistant.helpers.device_registry.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch(
+                "homeassistant.helpers.entity_registry.async_get",
+                return_value=mock_entity_registry,
+            ),
+            patch(
+                "custom_components.netro_watering.diagnostics.async_redact_data"
+            ) as mock_redact,
+        ):
             mock_redact.side_effect = lambda data, keys: data
 
             result = await async_get_config_entry_diagnostics(
@@ -474,16 +490,19 @@ class TestDiagnosticsMainFunction:
             "other_entity": other_entity,
         }
 
-        with patch(
-            "homeassistant.helpers.device_registry.async_get",
-            return_value=mock_device_registry,
-        ), patch(
-            "homeassistant.helpers.entity_registry.async_get",
-            return_value=entity_registry,
-        ), patch(
-            "custom_components.netro_watering.diagnostics.async_redact_data"
-        ) as mock_redact:
-
+        with (
+            patch(
+                "homeassistant.helpers.device_registry.async_get",
+                return_value=mock_device_registry,
+            ),
+            patch(
+                "homeassistant.helpers.entity_registry.async_get",
+                return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.netro_watering.diagnostics.async_redact_data"
+            ) as mock_redact,
+        ):
             mock_redact.side_effect = lambda data, keys: data
             mock_hass.states.get.return_value = None
 

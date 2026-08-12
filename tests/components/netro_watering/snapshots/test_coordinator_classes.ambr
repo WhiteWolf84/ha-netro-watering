@@ -128,7 +128,7 @@
 # ---
 # name: TestNetroControllerUpdateCoordinator.test_async_update_data_with_api_error_get_info
   dict({
-    'exception_message': 'Errore comunicando con API Netro per controller: unhandled errors in a TaskGroup (1 sub-exception)',
+    'exception_message': 'Error communicating with the Netro API for controller Test Controller: A Netro (NPA) error occurred -- error code #None -> API Error on get_info',
     'exception_type': 'UpdateFailed',
     'get_info_called': True,
     'get_moistures_called': True,
@@ -257,7 +257,7 @@
 # ---
 # name: TestNetroSensorUpdateCoordinator.test_async_update_data_with_api_error
   dict({
-    'exception_message': 'Errore comunicando con API Netro per sensore: API Error',
+    'exception_message': 'Error communicating with the Netro API for sensor Test Sensor: A Netro (NPA) error occurred -- error code #None -> API Error',
     'exception_type': 'UpdateFailed',
   })
 # ---

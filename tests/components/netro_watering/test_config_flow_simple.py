@@ -31,12 +31,14 @@ class TestPlaceholderHubEdgeCases:
     @pytest.mark.asyncio
     async def test_placeholder_hub_check_none_response(self, hass):
         """Test PlaceholderHub check method when API returns None."""
-        with patch(
-            "custom_components.netro_watering.config_flow.async_get_clientsession"
-        ), patch(
-            "custom_components.netro_watering.config_flow.NetroClient"
-        ) as mock_client_class:
-
+        with (
+            patch(
+                "custom_components.netro_watering.config_flow.async_get_clientsession"
+            ),
+            patch(
+                "custom_components.netro_watering.config_flow.NetroClient"
+            ) as mock_client_class,
+        ):
             # Mock client that returns None
             mock_client = AsyncMock()
             mock_client.get_info.return_value = None
@@ -102,12 +104,14 @@ class TestConfigFlowErrorHandling:
         """Test PlaceholderHub check method with successful response."""
         mock_info = {"data": {"device": {"name": "Test Device"}}}
 
-        with patch(
-            "custom_components.netro_watering.config_flow.async_get_clientsession"
-        ), patch(
-            "custom_components.netro_watering.config_flow.NetroClient"
-        ) as mock_client_class:
-
+        with (
+            patch(
+                "custom_components.netro_watering.config_flow.async_get_clientsession"
+            ),
+            patch(
+                "custom_components.netro_watering.config_flow.NetroClient"
+            ) as mock_client_class,
+        ):
             # Mock successful client response
             mock_client = AsyncMock()
             mock_client.get_info.return_value = mock_info

@@ -6,10 +6,10 @@ including device, sensor, fallback, authentication, connection, and duplicate en
 
 from unittest import mock
 
-import pytest
 from homeassistant import data_entry_flow
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
+import pytest
 
 from .test_imports import (
     CONF_DEVICE_HW_VERSION,

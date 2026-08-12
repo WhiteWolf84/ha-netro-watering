@@ -2,10 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+import pytest
 
 from custom_components.netro_watering.binary_sensor import (
     NETRO_ZONE_WATERING_DESCRIPTION,

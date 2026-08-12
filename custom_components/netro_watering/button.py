@@ -19,10 +19,8 @@ PARALLEL_UPDATES = 1
 
 NETRO_CONTROLLER_BUTTON_DESCRIPTION = ButtonEntityDescription(
     key="refresh",
-    name="Refresh",
     entity_registry_enabled_default=True,
     translation_key="refresh",
-    icon="mdi:refresh",
 )
 
 

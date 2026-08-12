@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
+import logging
 from typing import Any
 
-import homeassistant.util.dt as dt_util
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -16,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+import homeassistant.util.dt as dt_util
 
 from .const import (
     CONF_DEVICE_TYPE,
@@ -52,11 +52,9 @@ class NetroBinarySensorEntityDescription(
 
 NETRO_ZONE_WATERING_DESCRIPTION = NetroBinarySensorEntityDescription(
     key="iswatering",
-    name="Is it watering ?",
     device_class=BinarySensorDeviceClass.RUNNING,
     translation_key="iswatering",
     netro_name="watering",
-    icon="mdi:watering-can-outline",
 )
 
 

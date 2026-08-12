@@ -23,7 +23,7 @@ def get_int_option(
     value = next((v for v in sources if v is not None), default)
     try:
         result = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         _LOGGER.warning(
             "The value provided for '%s' is invalid, defaulting to %d", name, default
         )

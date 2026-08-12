@@ -5,7 +5,7 @@
 def _is_ha_core_environment() -> bool:
     """Check if running in Home Assistant Core environment."""
     try:
-        import homeassistant.components.netro_watering  # type: ignore # noqa: F401, PLC0415 # pylint: disable=W0611
+        import homeassistant.components.netro_watering  # type: ignore # noqa: F401 # pylint: disable=W0611
     except ImportError:
         return False
     else:

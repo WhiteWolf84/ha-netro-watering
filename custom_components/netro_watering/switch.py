@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from enum import IntFlag
+import logging
 from typing import Any
 
-import homeassistant.util.dt as dt_util
-import voluptuous as vol
 from homeassistant.components.switch import (
     SwitchDeviceClass,
     SwitchEntity,
@@ -19,10 +17,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import entity_platform
+from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+import homeassistant.util.dt as dt_util
+import voluptuous as vol
 
 from .const import (
     ATTR_WATERING_DELAY,
@@ -106,18 +105,15 @@ class NetroSwitchEntityDescription(SwitchEntityDescription, NetroRequiredKeysMix
 # description of the start/stop watering switch
 NETRO_WATERING_SWITCH_DESCRIPTION = NetroSwitchEntityDescription(
     key="watering",
-    name="Watering",
     device_class=SwitchDeviceClass.SWITCH,
     translation_key="watering",
     netro_on_name="start_watering",
     netro_off_name="stop_watering",
-    icon="mdi:sprinkler",
 )
 
 # description of the enable/disable switch
 NETRO_ENABLED_SWITCH_DESCRIPTION = SwitchEntityDescription(
     key="enabled",
-    name="Enabled",
     device_class=SwitchDeviceClass.SWITCH,
     translation_key="enabled",
 )
@@ -282,8 +278,6 @@ class ControllerEnablingSwitch(
         _LOGGER.info("Disabling %s device", self.coordinator.name)
         await self.coordinator.async_request_refresh()
 
-
-
     @property
     def is_on(self) -> bool:
         """Return true if switch is on."""
@@ -387,8 +381,6 @@ class ZoneWateringSwitch(
         await asyncio.sleep(self._before_refresh_seconds)
         await self.coordinator.async_request_refresh()
 
-
-
     @property
     def is_on(self) -> bool:
         """Return true if switch is on."""
@@ -478,8 +470,6 @@ class ControllerWateringSwitch(
         )
         await asyncio.sleep(self._before_refresh_seconds)
         await self.coordinator.async_request_refresh()
-
-
 
     @property
     def is_on(self) -> bool:

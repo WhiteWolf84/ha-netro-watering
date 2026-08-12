@@ -1,4 +1,31 @@
 {
+  "entity": {
+    "binary_sensor": {
+      "iswatering": {
+        "default": "mdi:watering-can-outline"
+      }
+    },
+    "button": {
+      "refresh": {
+        "default": "mdi:refresh"
+      }
+    },
+    "calendar": {
+      "schedules": {
+        "default": "mdi:calendar-clock"
+      }
+    },
+    "sensor": {
+      "token_remaining": {
+        "default": "mdi:hand-coin"
+      }
+    },
+    "switch": {
+      "watering": {
+        "default": "mdi:sprinkler"
+      }
+    }
+  },
   "services": {
     "no_water": "mdi:water-off",
     "refresh_data": "mdi:refresh",

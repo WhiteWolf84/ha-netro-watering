@@ -1,0 +1,96 @@
+[project]
+name = "ha-netro-watering"
+description = "Home Assistant custom integration for the Netro smart watering system"
+requires-python = ">=3.14"
+dynamic = ["version"]
+
+# ---------------------------------------------------------------------------
+# Ruff -- the single linter/formatter for this repository.
+# Rules are a pragmatic subset of what Home Assistant Core enforces.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+src = ["custom_components", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "F",     # pyflakes
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "C4",    # flake8-comprehensions
+    "D",     # pydocstyle
+    "PL",    # pylint
+    "RUF",   # ruff-specific
+    "ASYNC", # flake8-async
+    "T20",   # flake8-print
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "D202",    # no blank lines after function docstring
+    "D203",    # incompatible with D211
+    "D213",    # incompatible with D212
+    "PLR0912", # too many branches -- the coordinators are inherently branchy
+    "PLR0913", # too many arguments -- config-driven constructors
+    "PLR0917", # ditto: coordinators/entities take many keyword arguments
+    "PLR0915", # too many statements
+    "PLR2004", # magic values are fine in tests and unit conversions
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100", "D101", "D102", "D103", "D104", "PLC0415"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components", "tests"]
+combine-as-imports = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.14"
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_configs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+# ---------------------------------------------------------------------------
+# pytest / coverage
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-p", "syrupy",
+    "-p", "pytest_homeassistant_custom_component",
+    "--cov=custom_components",
+]
+
+[tool.coverage.run]
+source = ["custom_components"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == '__main__':",
+]

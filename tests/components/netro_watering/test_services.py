@@ -2,15 +2,13 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.setup import async_setup_component
+import pytest
 
 from custom_components.netro_watering import (
-    SERVICE_NO_WATER_NAME,
     SERVICE_REFRESH_NAME,
-    SERVICE_REPORT_WEATHER_NAME,
 )
 from custom_components.netro_watering.const import (
     ATTR_CONFIG_ENTRY_ID,
@@ -410,18 +408,34 @@ class TestReportWeatherService:
 
     @pytest.mark.asyncio
     async def test_service_is_registered(self, hass: HomeAssistant):
-        """Test that services are registered only when config entries are set up.
+        """Every action exists after ``async_setup``, with no config entry loaded.
 
-        Services are now registered in _async_register_services which is called
-        from async_setup_entry, not from async_setup. This is because services
-        need a config entry to function properly (they need entry_id to work).
+        This is the `action-setup` quality-scale rule: registering at integration
+        setup is what lets Home Assistant validate automations that reference these
+        actions even while no entry is set up. The target entry is validated at call
+        time instead -- see ``_async_get_loaded_entry``.
         """
-        # First, just async_setup should not register services
         assert await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
-        assert not hass.services.has_service(DOMAIN, "report_weather")
 
-        # Services should be registered only when we have config entries
-        # This is tested implicitly in other tests that create config entries
+        for service in (
+            "report_weather",
+            "refresh_data",
+            "no_water",
+            "set_moisture",
+        ):
+            assert hass.services.has_service(DOMAIN, service), service
+
+    async def test_service_rejects_unloaded_entry(self, hass: HomeAssistant):
+        """Calling an action against an entry that is not loaded is a user error."""
+        assert await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
+
+        with pytest.raises(ServiceValidationError, match="does not exist"):
+            await hass.services.async_call(
+                DOMAIN,
+                "refresh_data",
+                {ATTR_CONFIG_ENTRY_ID: "no_such_entry"},
+                blocking=True,
+            )
 
     async def test_report_weather_function_minimal(
         self,
@@ -483,12 +497,13 @@ class TestReportWeatherService:
         """
 
         # Mock the network components to avoid real HTTP calls
-        with patch("pynetro.NetroClient") as mock_netro_client_class, patch(
-            "homeassistant.helpers.aiohttp_client.async_get_clientsession"
-        ) as mock_session_getter, patch(
-            "custom_components.netro_watering._LOGGER"
-        ) as mock_logger:
-
+        with (
+            patch("pynetro.NetroClient") as mock_netro_client_class,
+            patch(
+                "homeassistant.helpers.aiohttp_client.async_get_clientsession"
+            ) as mock_session_getter,
+            patch("custom_components.netro_watering._LOGGER") as mock_logger,
+        ):
             # Setup mock client instance
             mock_client_instance = AsyncMock()
             mock_netro_client_class.return_value = mock_client_instance
@@ -931,7 +946,7 @@ class TestRefreshServiceEdgeCases:
 
 
 class TestAsyncUnloadEntry:
-    """Test suite for async_unload_entry service management logic."""
+    """Unloading an entry must not take the integration's actions down with it."""
 
     @pytest.fixture
     def mock_hass(self):
@@ -953,14 +968,6 @@ class TestAsyncUnloadEntry:
         return entry
 
     @pytest.fixture
-    def controller_entry_2(self):
-        """Create a second mock controller ConfigEntry."""
-        entry = MagicMock()
-        entry.entry_id = "controller_2"
-        entry.data = {"device_type": "controller"}
-        return entry
-
-    @pytest.fixture
     def sensor_entry(self):
         """Create a mock sensor ConfigEntry."""
         entry = MagicMock()
@@ -968,372 +975,52 @@ class TestAsyncUnloadEntry:
         entry.data = {"device_type": "sensor"}
         return entry
 
-    @pytest.fixture
-    def sensor_entry_2(self):
-        """Create a second mock sensor ConfigEntry."""
-        entry = MagicMock()
-        entry.entry_id = "sensor_2"
-        entry.data = {"device_type": "sensor"}
-        return entry
+    async def test_unload_forwards_to_platforms(self, mock_hass, controller_entry):
+        """Unloading delegates to the platforms and reports their result."""
+        from custom_components.netro_watering import async_unload_entry
 
-    async def test_unload_last_controller_removes_moisture_service(
-        self, mock_hass, controller_entry, snapshot
-    ):
-        """Test that unloading the last controller removes the moisture service."""
-        from custom_components.netro_watering import (
-            SERVICE_SET_MOISTURE_NAME,
-            async_unload_entry,
-        )
+        result = await async_unload_entry(mock_hass, controller_entry)
 
-        # Setup: Only one controller entry, no other loaded entries
-        mock_hass.config_entries.async_loaded_entries.return_value = [controller_entry]
-
-        with patch("custom_components.netro_watering._LOGGER") as mock_logger:
-            result = await async_unload_entry(mock_hass, controller_entry)
-
-        # Verify platform unload was called
+        assert result is True
         mock_hass.config_entries.async_unload_platforms.assert_called_once()
 
-        # Verify coordinator was removed from hass.data
-        assert controller_entry.entry_id not in mock_hass.data[DOMAIN]
+    async def test_unload_failure_is_propagated(self, mock_hass, controller_entry):
+        """A failed platform unload is reported back to Home Assistant."""
+        from custom_components.netro_watering import async_unload_entry
 
-        # Verify moisture service was removed (last controller)
-        mock_hass.services.async_remove.assert_any_call(
-            DOMAIN, SERVICE_SET_MOISTURE_NAME
-        )
-
-        # Verify integration-level services were removed (no entries left)
-        mock_hass.services.async_remove.assert_any_call(
-            DOMAIN, SERVICE_REPORT_WEATHER_NAME
-        )
-        mock_hass.services.async_remove.assert_any_call(DOMAIN, SERVICE_REFRESH_NAME)
-        mock_hass.services.async_remove.assert_any_call(DOMAIN, SERVICE_NO_WATER_NAME)
-
-        # Verify logging
-        mock_logger.info.assert_any_call(
-            "Removing service %s", SERVICE_SET_MOISTURE_NAME
-        )
-
-        result_data = {
-            "unload_successful": result,
-            "coordinator_removed": controller_entry.entry_id
-            not in mock_hass.data[DOMAIN],
-            "moisture_service_removed": any(
-                call[0] == (DOMAIN, SERVICE_SET_MOISTURE_NAME)
-                for call in mock_hass.services.async_remove.call_args_list
-            ),
-            "integration_services_removed": mock_hass.services.async_remove.call_count
-            == 4,  # moisture + 3 integration services
-            "total_service_removals": mock_hass.services.async_remove.call_count,
-        }
-
-        assert result_data == snapshot
-
-    async def test_unload_controller_with_other_controller_keeps_moisture_service(
-        self, mock_hass, controller_entry, controller_entry_2, snapshot
-    ):
-        """Test that unloading a controller when others exist keeps the moisture service."""
-        from custom_components.netro_watering import (
-            SERVICE_SET_MOISTURE_NAME,
-            async_unload_entry,
-        )
-
-        # Setup: Two controller entries (keep controller_2 in data for "preserved" check)
-        mock_hass.data[DOMAIN][controller_entry_2.entry_id] = "mock_coordinator_2"
-        mock_hass.config_entries.async_loaded_entries.return_value = [
-            controller_entry,
-            controller_entry_2,
-        ]
-
-        with patch("custom_components.netro_watering._LOGGER"):
-            result = await async_unload_entry(mock_hass, controller_entry)
-
-        # Verify coordinator was removed from hass.data
-        assert controller_entry.entry_id not in mock_hass.data[DOMAIN]
-        assert controller_entry_2.entry_id in mock_hass.data[DOMAIN]
-
-        # Verify moisture service was NOT removed (other controller exists)
-        moisture_service_calls = [
-            call
-            for call in mock_hass.services.async_remove.call_args_list
-            if call[0] == (DOMAIN, SERVICE_SET_MOISTURE_NAME)
-        ]
-        assert len(moisture_service_calls) == 0
-
-        # Verify integration-level services were NOT removed (other entry exists)
-        assert mock_hass.services.async_remove.call_count == 0
-
-        result_data = {
-            "unload_successful": result,
-            "coordinator_removed": controller_entry.entry_id
-            not in mock_hass.data[DOMAIN],
-            "other_coordinator_preserved": controller_entry_2.entry_id
-            in mock_hass.data[DOMAIN],
-            "moisture_service_not_removed": len(moisture_service_calls) == 0,
-            "no_services_removed": mock_hass.services.async_remove.call_count == 0,
-        }
-
-        assert result_data == snapshot
-
-    async def test_unload_controller_with_sensors_removes_moisture_but_not_integration(
-        self, mock_hass, controller_entry, sensor_entry, sensor_entry_2, snapshot
-    ):
-        """Test unloading last controller with sensors present - removes moisture but not integration services."""
-        from custom_components.netro_watering import (
-            SERVICE_SET_MOISTURE_NAME,
-            async_unload_entry,
-        )
-
-        # Setup: One controller + two sensors (keep sensors in data for "preserved" check)
-        mock_hass.data[DOMAIN][sensor_entry.entry_id] = "mock_sensor_1"
-        mock_hass.data[DOMAIN][sensor_entry_2.entry_id] = "mock_sensor_2"
-        mock_hass.config_entries.async_loaded_entries.return_value = [
-            controller_entry,
-            sensor_entry,
-            sensor_entry_2,
-        ]
+        mock_hass.config_entries.async_unload_platforms.return_value = False
 
         result = await async_unload_entry(mock_hass, controller_entry)
 
-        # Verify moisture service was removed (no more controllers)
-        moisture_service_calls = [
-            call
-            for call in mock_hass.services.async_remove.call_args_list
-            if call[0] == (DOMAIN, SERVICE_SET_MOISTURE_NAME)
-        ]
-        assert len(moisture_service_calls) == 1
-
-        # Verify integration services were NOT removed (sensors still exist)
-        integration_services_calls = [
-            call
-            for call in mock_hass.services.async_remove.call_args_list
-            if call[0][1]
-            in [
-                SERVICE_REPORT_WEATHER_NAME,
-                SERVICE_REFRESH_NAME,
-                SERVICE_NO_WATER_NAME,
-            ]
-        ]
-        assert len(integration_services_calls) == 0
-
-        result_data = {
-            "unload_successful": result,
-            "moisture_service_removed": len(moisture_service_calls) == 1,
-            "integration_services_not_removed": len(integration_services_calls) == 0,
-            "sensors_preserved": (
-                sensor_entry.entry_id in mock_hass.data[DOMAIN]
-                and sensor_entry_2.entry_id in mock_hass.data[DOMAIN]
-            ),
-            "total_service_removals": mock_hass.services.async_remove.call_count,
-        }
-
-        assert result_data == snapshot
-
-    async def test_unload_sensor_does_not_affect_moisture_service(
-        self, mock_hass, controller_entry, sensor_entry, snapshot
-    ):
-        """Test that unloading a sensor doesn't affect the moisture service."""
-        from custom_components.netro_watering import async_unload_entry
-
-        # Setup: One controller + one sensor (keep controller in data for "preserved" check)
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_controller"
-        mock_hass.config_entries.async_loaded_entries.return_value = [
-            controller_entry,
-            sensor_entry,
-        ]
-
-        result = await async_unload_entry(mock_hass, sensor_entry)
-
-        # Verify controller was not affected
-        assert controller_entry.entry_id in mock_hass.data[DOMAIN]
-
-        # Verify NO services were removed (controller still exists)
-        assert mock_hass.services.async_remove.call_count == 0
-
-        result_data = {
-            "unload_successful": result,
-            "controller_preserved": controller_entry.entry_id in mock_hass.data[DOMAIN],
-            "no_services_removed": mock_hass.services.async_remove.call_count == 0,
-        }
-
-        assert result_data == snapshot
-
-    async def test_unload_last_sensor_with_no_controllers_removes_integration_services(
-        self, mock_hass, sensor_entry, snapshot
-    ):
-        """Test that unloading the last sensor removes integration services."""
-        from custom_components.netro_watering import async_unload_entry
-
-        # Setup: Only one sensor entry
-        mock_hass.config_entries.async_loaded_entries.return_value = [sensor_entry]
-
-        result = await async_unload_entry(mock_hass, sensor_entry)
-
-        # Verify moisture service was NOT removed (no controllers to begin with)
-        from custom_components.netro_watering import SERVICE_SET_MOISTURE_NAME
-
-        moisture_service_calls = [
-            call
-            for call in mock_hass.services.async_remove.call_args_list
-            if call[0] == (DOMAIN, SERVICE_SET_MOISTURE_NAME)
-        ]
-        assert len(moisture_service_calls) == 0
-
-        # Verify integration services were removed (no entries left)
-        integration_services_calls = [
-            call
-            for call in mock_hass.services.async_remove.call_args_list
-            if call[0][1]
-            in [
-                SERVICE_REPORT_WEATHER_NAME,
-                SERVICE_REFRESH_NAME,
-                SERVICE_NO_WATER_NAME,
-            ]
-        ]
-        assert len(integration_services_calls) == 3
-
-        result_data = {
-            "unload_successful": result,
-            "moisture_service_not_removed": len(moisture_service_calls) == 0,
-            "integration_services_removed": len(integration_services_calls) == 3,
-            "total_service_removals": mock_hass.services.async_remove.call_count,
-        }
-
-        assert result_data == snapshot
-
-    async def test_unload_platform_failure_prevents_cleanup(
-        self, mock_hass, controller_entry, snapshot
-    ):
-        """Test that platform unload failure prevents both coordinator and service cleanup."""
-        from custom_components.netro_watering import async_unload_entry
-
-        # Setup: Platform unload fails
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = "mock_coordinator"
-        mock_hass.config_entries.async_loaded_entries.return_value = [controller_entry]
-        mock_hass.config_entries.async_unload_platforms.return_value = (
-            False  # Simulate failure
-        )
-
-        result = await async_unload_entry(mock_hass, controller_entry)
-
-        # Verify coordinator was NOT removed from hass.data (unload failed)
-        assert controller_entry.entry_id in mock_hass.data[DOMAIN]
-
-        # Verify NO services were removed (unload failed - corrected behavior)
-        assert mock_hass.services.async_remove.call_count == 0
-
-        # Should return False (unload failed)
         assert result is False
 
-    async def test_unload_complex_scenario_multiple_types(
-        self,
-        mock_hass,
-        controller_entry,
-        controller_entry_2,
-        sensor_entry,
-        sensor_entry_2,
-        snapshot,
+    @pytest.mark.parametrize("entry_fixture", ["controller_entry", "sensor_entry"])
+    async def test_unload_keeps_services_registered(
+        self, mock_hass, entry_fixture, request
     ):
-        """Test complex scenario: multiple controllers and sensors, removing one controller."""
-        from custom_components.netro_watering import (
-            async_unload_entry,
-        )
+        """Actions are owned by the integration, so unloading an entry keeps them.
 
-        # Setup: 2 controllers + 2 sensors (keep non-unloaded entries for "preserved" checks)
-        mock_hass.data[DOMAIN][controller_entry_2.entry_id] = "mock_controller_2"
-        mock_hass.data[DOMAIN][sensor_entry.entry_id] = "mock_sensor_1"
-        mock_hass.data[DOMAIN][sensor_entry_2.entry_id] = "mock_sensor_2"
-        mock_hass.config_entries.async_loaded_entries.return_value = [
-            controller_entry,
-            controller_entry_2,
-            sensor_entry,
-            sensor_entry_2,
-        ]
+        They are registered once in ``async_setup`` precisely so that automations
+        referencing them stay valid while an entry is unloaded or reloading.
+        """
+        from custom_components.netro_watering import async_unload_entry
 
-        result = await async_unload_entry(mock_hass, controller_entry)
+        entry = request.getfixturevalue(entry_fixture)
+        # Even when this is the very last entry of the integration.
+        mock_hass.config_entries.async_loaded_entries.return_value = [entry]
 
-        # Verify only the specific coordinator was removed
-        assert controller_entry.entry_id not in mock_hass.data[DOMAIN]
-        assert controller_entry_2.entry_id in mock_hass.data[DOMAIN]
-        assert sensor_entry.entry_id in mock_hass.data[DOMAIN]
-        assert sensor_entry_2.entry_id in mock_hass.data[DOMAIN]
+        result = await async_unload_entry(mock_hass, entry)
 
-        # Verify NO services were removed (other entries still exist)
-        assert mock_hass.services.async_remove.call_count == 0
+        assert result is True
+        mock_hass.services.async_remove.assert_not_called()
 
-        result_data = {
-            "unload_successful": result,
-            "target_controller_removed": controller_entry.entry_id
-            not in mock_hass.data[DOMAIN],
-            "other_controller_preserved": controller_entry_2.entry_id
-            in mock_hass.data[DOMAIN],
-            "sensors_preserved": (
-                sensor_entry.entry_id in mock_hass.data[DOMAIN]
-                and sensor_entry_2.entry_id in mock_hass.data[DOMAIN]
-            ),
-            "no_services_removed": mock_hass.services.async_remove.call_count == 0,
-            "remaining_entries_count": len(
-                [
-                    entry_id
-                    for entry_id in mock_hass.data[DOMAIN]
-                    if entry_id
-                    in [
-                        controller_entry_2.entry_id,
-                        sensor_entry.entry_id,
-                        sensor_entry_2.entry_id,
-                    ]
-                ]
-            ),
-        }
-
-        assert result_data == snapshot
-
-    async def test_unload_entry_logging_verification(
-        self, mock_hass, controller_entry, snapshot
-    ):
-        """Test that proper logging occurs during unload operations."""
-        from custom_components.netro_watering import (
-            SERVICE_SET_MOISTURE_NAME,
-            async_unload_entry,
-        )
-
-        # Setup: Last controller entry
-        mock_coordinator = "mock_coordinator_object"
-        mock_hass.data[DOMAIN][controller_entry.entry_id] = mock_coordinator
-        mock_hass.config_entries.async_loaded_entries.return_value = [controller_entry]
+    async def test_unload_logging(self, mock_hass, controller_entry):
+        """Unloading logs the entry it released."""
+        from custom_components.netro_watering import async_unload_entry
 
         with patch("custom_components.netro_watering._LOGGER") as mock_logger:
-            result = await async_unload_entry(mock_hass, controller_entry)
-
-        # Verify unload logging
-        mock_logger.info.assert_any_call("Unloaded config entry: %s", controller_entry.runtime_data)
-
-        # Verify service removal logging
-        mock_logger.info.assert_any_call(
-            "Removing service %s", SERVICE_SET_MOISTURE_NAME
-        )
+            await async_unload_entry(mock_hass, controller_entry)
 
         mock_logger.info.assert_any_call(
-            "Removing service %s", SERVICE_REPORT_WEATHER_NAME
+            "Unloaded config entry: %s", controller_entry.runtime_data
         )
-        mock_logger.info.assert_any_call("Removing service %s", SERVICE_REFRESH_NAME)
-        mock_logger.info.assert_any_call("Removing service %s", SERVICE_NO_WATER_NAME)
-
-        # Count all logging calls
-        deletion_logs = [
-            call for call in mock_logger.info.call_args_list if "Unloaded" in call[0][0]
-        ]
-        service_removal_logs = [
-            call
-            for call in mock_logger.info.call_args_list
-            if "Removing service" in call[0][0]
-        ]
-
-        result_data = {
-            "unload_successful": result,
-            "deletion_logged": len(deletion_logs) == 1,
-            "service_removal_logs_count": len(service_removal_logs),
-            "total_log_calls": mock_logger.info.call_count,
-        }
-
-        assert result_data == snapshot

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
-import logging
 from datetime import timedelta
+import logging
 
+import aiohttp
 from dateutil.relativedelta import relativedelta
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 import homeassistant.util.dt as dt_util
-import asyncio
-from pynetro import NetroClient, NetroConfig
+from pynetro import NetroClient, NetroConfig, NetroException
 
 from .const import (
     DOMAIN,
@@ -69,6 +71,10 @@ from .const import (
 from .http_client import AiohttpClient
 
 _LOGGER = logging.getLogger(__name__)
+
+# Failures that mean "the Netro cloud did not answer us properly" rather than a bug
+# in the integration. Only these are turned into an UpdateFailed.
+NETRO_API_ERRORS = (NetroException, aiohttp.ClientError, TimeoutError, KeyError)
 
 # pylint: disable=attribute-defined-outside-init,consider-using-dict-items,chained-comparison
 # mypy: disable-error-code="var-annotated,arg-type"
@@ -181,6 +187,7 @@ class NetroUpdateCoordinator(DataUpdateCoordinator):
         self,
         hass: HomeAssistant,
         *,
+        config_entry: ConfigEntry,
         refresh_interval: int,
         serial_number: str,
         device_type: str,
@@ -192,6 +199,7 @@ class NetroUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name=device_name,
             update_interval=timedelta(minutes=refresh_interval),
         )
@@ -229,6 +237,7 @@ class NetroSensorUpdateCoordinator(NetroUpdateCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
+        config_entry: ConfigEntry,
         refresh_interval: int,
         sensor_value_days_before_today: int,
         serial_number: str,
@@ -240,6 +249,7 @@ class NetroSensorUpdateCoordinator(NetroUpdateCoordinator):
         """Initialize my sensor coordinator."""
         super().__init__(
             hass,
+            config_entry=config_entry,
             refresh_interval=refresh_interval,
             serial_number=serial_number,
             device_type=device_type,
@@ -284,8 +294,10 @@ class NetroSensorUpdateCoordinator(NetroUpdateCoordinator):
                 ).strftime("%Y-%m-%d"),
                 end_date=dt_util.now().date().strftime("%Y-%m-%d"),
             )
-        except Exception as err:
-            raise UpdateFailed(f"Errore comunicando con API Netro per sensore: {err}") from err
+        except NETRO_API_ERRORS as err:
+            raise UpdateFailed(
+                f"Error communicating with the Netro API for sensor {self.name}: {err}"
+            ) from err
 
         # get meta data
         meta_data = res["meta"]
@@ -316,9 +328,7 @@ class NetroSensorUpdateCoordinator(NetroUpdateCoordinator):
             self.moisture = sensor_data[NETRO_SENSOR_MOISTURE]
             # Netro Public API returns sunlight in klux; HA expects lux (LIGHT_LUX).
             raw_sunlight = sensor_data[NETRO_SENSOR_SUNLIGHT]
-            self.sunlight = (
-                raw_sunlight * 1000 if raw_sunlight is not None else None
-            )
+            self.sunlight = raw_sunlight * 1000 if raw_sunlight is not None else None
             self.celsius = sensor_data[NETRO_SENSOR_CELSIUS]
             self.fahrenheit = sensor_data[NETRO_SENSOR_FAHRENHEIT]
             self.battery_level = sensor_data[NETRO_SENSOR_BATTERY_LEVEL]
@@ -494,7 +504,7 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
         @property
         def device_info(self) -> DeviceInfo:
             """Return information about the zone as a device. To be used when creating related entities."""
-            return DeviceInfo(
+            device_info = DeviceInfo(
                 name=(
                     f"{self.name}"
                     if self.name  # if name is not set this is a Pixie and so we concatenate the controller name and the index of the zone
@@ -503,8 +513,12 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
                 identifiers={(DOMAIN, self.serial_number)},
                 manufacturer=MANUFACTURER,
                 model=NETRO_DEFAULT_ZONE_MODEL,
-                via_device=(DOMAIN, self.parent_controller.serial_number),
             )
+            # `via_device` is deprecated since HA 2026.8: link to the controller by
+            # its registry id, which setup stored on the coordinator.
+            if (controller_id := self.parent_controller.device_entry_id) is not None:
+                device_info["via_device_id"] = controller_id
+            return device_info
 
     # _schedules and _moistures are list of dict whose key = str and value = any
     # _active_zones is a dictionary indexed by the zone ith and whose value is a Zone object
@@ -512,6 +526,7 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
+        config_entry: ConfigEntry,
         refresh_interval: int,
         slowdown_factors: list,
         schedules_months_before: int,
@@ -525,6 +540,7 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
         """Initialize my controller coordinator."""
         super().__init__(
             hass,
+            config_entry=config_entry,
             refresh_interval=refresh_interval,
             serial_number=serial_number,
             device_type=device_type,
@@ -542,6 +558,9 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
         self._active_zones = {}
         self._schedules: list = []
         self._moistures: list = []
+        # Registry id of the controller device, assigned during setup once the
+        # device has been created. Zones link back to it through `via_device_id`.
+        self.device_entry_id: str | None = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -695,21 +714,23 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
                 schedule[NETRO_SCHEDULE_END_TIME] + TZ_OFFSET
             ),
             "summary": f"{self.active_zones[schedule[NETRO_SCHEDULE_ZONE]].name}",
-            "description": f"Duration: {round(
-                (
-                    datetime.datetime.fromisoformat(
-                        schedule[NETRO_SCHEDULE_END_TIME] + TZ_OFFSET
-                    )
-                    - datetime.datetime.fromisoformat(
-                        schedule[NETRO_SCHEDULE_START_TIME] + TZ_OFFSET
-                    )
-                ).seconds
-                / 60
-            )} minutes, {
+            "description": f"Duration: {
+                round(
+                    (
+                        datetime.datetime.fromisoformat(
+                            schedule[NETRO_SCHEDULE_END_TIME] + TZ_OFFSET
+                        )
+                        - datetime.datetime.fromisoformat(
+                            schedule[NETRO_SCHEDULE_START_TIME] + TZ_OFFSET
+                        )
+                    ).seconds
+                    / 60
+                )
+            } minutes, {
                 {
-                    NETRO_SCHEDULE_FIX: "schedule from programs",
-                    NETRO_SCHEDULE_SMART: "Netro generated schedule",
-                    NETRO_SCHEDULE_MANUAL: "manual watering",
+                    NETRO_SCHEDULE_FIX: 'schedule from programs',
+                    NETRO_SCHEDULE_SMART: 'Netro generated schedule',
+                    NETRO_SCHEDULE_MANUAL: 'manual watering',
                 }[schedule[NETRO_SCHEDULE_SOURCE]]
                 if schedule[NETRO_SCHEDULE_SOURCE]
                 in (
@@ -717,12 +738,12 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
                     NETRO_SCHEDULE_SMART,
                     NETRO_SCHEDULE_MANUAL,
                 )
-                else f"unknown source({schedule[NETRO_SCHEDULE_SOURCE]})"
+                else f'unknown source({schedule[NETRO_SCHEDULE_SOURCE]})'
             }, {
                 {
-                    NETRO_SCHEDULE_EXECUTED: "has been executed",
-                    NETRO_SCHEDULE_EXECUTING: "currently being executed",
-                    NETRO_SCHEDULE_VALID: "is planned",
+                    NETRO_SCHEDULE_EXECUTED: 'has been executed',
+                    NETRO_SCHEDULE_EXECUTING: 'currently being executed',
+                    NETRO_SCHEDULE_VALID: 'is planned',
                 }[schedule[NETRO_SCHEDULE_STATUS]]
                 if schedule[NETRO_SCHEDULE_STATUS]
                 in (
@@ -730,7 +751,7 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
                     NETRO_SCHEDULE_EXECUTING,
                     NETRO_SCHEDULE_VALID,
                 )
-                else f"unknown status({schedule[NETRO_SCHEDULE_STATUS]})"
+                else f'unknown status({schedule[NETRO_SCHEDULE_STATUS]})'
             }.",
         }
 
@@ -836,18 +857,18 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
 
         # pre-calculate dates for get_schedules
         start_date = str(
-            dt_util.now().date()
-            - relativedelta(months=self.schedules_months_before)
+            dt_util.now().date() - relativedelta(months=self.schedules_months_before)
         )
         end_date = str(
-            dt_util.now().date()
-            + relativedelta(months=self.schedules_months_after)
+            dt_util.now().date() + relativedelta(months=self.schedules_months_after)
         )
 
         try:
             async with asyncio.TaskGroup() as tg:
                 res_info_task = tg.create_task(client.get_info(self.serial_number))
-                res_moistures_task = tg.create_task(client.get_moistures(self.serial_number))
+                res_moistures_task = tg.create_task(
+                    client.get_moistures(self.serial_number)
+                )
                 res_schedules_task = tg.create_task(
                     client.get_schedules(
                         self.serial_number,
@@ -859,8 +880,16 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
             res = res_info_task.result()
             res_moistures = res_moistures_task.result()
             res_schedules = res_schedules_task.result()
-        except Exception as err:
-            raise UpdateFailed(f"Errore comunicando con API Netro per controller: {err}") from err
+        except ExceptionGroup as err:
+            # TaskGroup wraps every failure in a group. Surface the first API error
+            # as an update failure and let anything else propagate as a real bug.
+            api_errors, others = err.split(NETRO_API_ERRORS)
+            if others is not None or api_errors is None:
+                raise
+            raise UpdateFailed(
+                f"Error communicating with the Netro API for controller {self.name}: "
+                f"{api_errors.exceptions[0]}"
+            ) from err
 
         device_data = res["data"]["device"]
         meta_data = res["meta"]
@@ -905,7 +934,6 @@ class NetroControllerUpdateCoordinator(NetroUpdateCoordinator):
 
         # update controller and zone attributes from schedules
         self._update_from_schedules(res_schedules["data"]["schedules"])
-
 
     async def enable(self):
         """Enable controller."""

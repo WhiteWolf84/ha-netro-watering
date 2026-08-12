@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
+import logging
 from typing import Any
 
-import homeassistant.util.dt as dt_util
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -19,6 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+import homeassistant.util.dt as dt_util
 
 from .const import (
     CONF_DEVICE_TYPE,
@@ -77,7 +77,6 @@ class NetroSensorEntityDescription(SensorEntityDescription, NetroRequiredKeysMix
 NETRO_SENSOR_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     NetroSensorEntityDescription(
         key="temperature",
-        name="Temperature",
         entity_registry_enabled_default=True,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
@@ -87,7 +86,6 @@ NETRO_SENSOR_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="humidity",
-        name="Humidity",
         entity_registry_enabled_default=True,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -97,7 +95,6 @@ NETRO_SENSOR_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="illuminance",
-        name="Illuminance",
         entity_registry_enabled_default=True,
         native_unit_of_measurement=LIGHT_LUX,
         state_class=SensorStateClass.MEASUREMENT,
@@ -107,7 +104,6 @@ NETRO_SENSOR_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="battery_percent",
-        name="Battery Percent",
         entity_registry_enabled_default=True,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -118,10 +114,8 @@ NETRO_SENSOR_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="token_remaining",
-        name="Token Remaining",
         state_class=SensorStateClass.TOTAL,
         translation_key="token_remaining",
-        icon="mdi:hand-coin",
         netro_name=NETRO_METADATA_TOKEN_REMAINING,
     ),
 )
@@ -132,7 +126,6 @@ NETRO_SENSOR_DESCRIPTIONS_KEYS = [desc.key for desc in NETRO_SENSOR_DESCRIPTIONS
 NETRO_CONTROLLER_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     NetroSensorEntityDescription(
         key="status",
-        name="Status",
         device_class=SensorDeviceClass.ENUM,
         options=[
             "standby",
@@ -148,10 +141,8 @@ NETRO_CONTROLLER_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="token_remaining",
-        name="Token Remaining",
         state_class=SensorStateClass.TOTAL,
         translation_key="token_remaining",
-        icon="mdi:hand-coin",
         netro_name=NETRO_METADATA_TOKEN_REMAINING,
     ),
 )
@@ -163,7 +154,6 @@ NETRO_CONTROLLER_DESCRIPTIONS_KEYS = [
 # description of the battery level sensor of the controller when relevant
 NETRO_CONTROLLER_BATTERY_DESCRIPTION = NetroSensorEntityDescription(
     key="battery_percent",
-    name="Battery Percent",
     entity_registry_enabled_default=True,
     native_unit_of_measurement=PERCENTAGE,
     state_class=SensorStateClass.MEASUREMENT,
@@ -177,7 +167,6 @@ NETRO_CONTROLLER_BATTERY_DESCRIPTION = NetroSensorEntityDescription(
 NETRO_ZONE_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     NetroSensorEntityDescription(
         key="last_watering_status",
-        name="Last Watering Status",
         device_class=SensorDeviceClass.ENUM,
         state_class=None,
         options=[
@@ -191,21 +180,18 @@ NETRO_ZONE_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="last_watering_start_datetime",
-        name="Last watering start time",
         device_class=SensorDeviceClass.TIMESTAMP,
         translation_key="last_watering_start_datetime",
         netro_name=NETRO_ZONE_LAST_WATERING_START,
     ),
     NetroSensorEntityDescription(
         key="last_watering_end_datetime",
-        name="Last watering end time",
         device_class=SensorDeviceClass.TIMESTAMP,
         translation_key="last_watering_end_datetime",
         netro_name=NETRO_ZONE_LAST_WATERING_END,
     ),
     NetroSensorEntityDescription(
         key="last_watering_source",
-        name="Last watering source",
         device_class=SensorDeviceClass.ENUM,
         state_class=None,
         options=[
@@ -219,7 +205,6 @@ NETRO_ZONE_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="next_watering_status",
-        name="Next watering status",
         device_class=SensorDeviceClass.ENUM,
         options=[
             "executed",
@@ -232,21 +217,18 @@ NETRO_ZONE_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="next_watering_start_datetime",
-        name="Next watering start time",
         device_class=SensorDeviceClass.TIMESTAMP,
         translation_key="next_watering_start_datetime",
         netro_name=NETRO_ZONE_NEXT_WATERING_START,
     ),
     NetroSensorEntityDescription(
         key="next_watering_end_datetime",
-        name="Next watering end time",
         device_class=SensorDeviceClass.TIMESTAMP,
         translation_key="next_watering_end_datetime",
         netro_name=NETRO_ZONE_NEXT_WATERING_END,
     ),
     NetroSensorEntityDescription(
         key="next_watering_source",
-        name="Next watering source",
         device_class=SensorDeviceClass.ENUM,
         state_class=None,
         options=[
@@ -260,7 +242,6 @@ NETRO_ZONE_DESCRIPTIONS: tuple[NetroSensorEntityDescription, ...] = (
     ),
     NetroSensorEntityDescription(
         key="humidity",
-        name="Humidity",
         entity_registry_enabled_default=True,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -439,9 +420,9 @@ class NetroController(
             ),
         }
         if self.coordinator.current_slowdown_factor > 1:
-            zone_attributes[
-                "slowdown factor"
-            ] = self.coordinator.current_slowdown_factor  # type: ignore[assignment]
+            zone_attributes["slowdown factor"] = (
+                self.coordinator.current_slowdown_factor
+            )  # type: ignore[assignment]
         meta_attributes = {
             EXTRA_STATE_ATTRIBUTE_SEP_LEFT: EXTRA_STATE_ATTRIBUTE_SEP_RIGHT,
             "request time (UTC)": (

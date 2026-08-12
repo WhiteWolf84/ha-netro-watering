@@ -15,6 +15,7 @@
 - [🌦️ Netro Weather Sync Blueprint](#🌦️-netro-weather-sync-blueprint)
 - [🖼️ Lovelace cards](#🖼️-lovelace-cards)
 - [🛠️ Advanced configuration](#🛠️-advanced-configuration)
+- [🧪 Development](#🧪-development)
 - [☕ Support](#support)
 
 ## ℹ️ About
@@ -22,7 +23,9 @@ Home Assistant integration for Netro Smart Garden devices. It lets you manage Ne
 
 The integration uses [Netro’s Public API](https://www.netrohome.com/en/shop/articles/10) for device access and scheduling.
 
-**Compatibility:** developed and tested with Home Assistant 2023.4.0 and later.
+**Requirements:** Home Assistant **2026.8.0** or later (Python 3.14). Releases in the
+`2.2.x` line target the device-registry and coordinator APIs introduced in 2026.8; if
+you are still on an older core, stay on the `2.1.x` line.
 
 *This project is community-maintained and not affiliated with Netro, Inc.*
 
@@ -253,6 +256,35 @@ netro_watering:
       to:   '17:00'
       sdf:  5        # e.g., base 2 min -> 10 min in this window
 ```
+
+## 🧪 Development
+
+The repository targets the same Python version as Home Assistant Core (3.14).
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r custom_components/netro_watering/requirements.test.txt
+```
+
+`requirements.test.txt` pins `pytest-homeassistant-custom-component`, which in turn
+pins the exact Home Assistant release the test suite runs against — bump that single
+pin to test against a newer core.
+
+```bash
+.venv/bin/python -m pytest tests -q            # test suite + coverage
+.venv/bin/ruff check custom_components tests   # lint
+.venv/bin/ruff format custom_components tests  # format
+```
+
+Ruff (lint + format), mypy and codespell also run through pre-commit, and the same
+checks gate every pull request in CI:
+
+```bash
+pre-commit install
+pre-commit run --all-files
+```
+
+All tool configuration lives in `pyproject.toml`.
 
 ## ☕ Support
 

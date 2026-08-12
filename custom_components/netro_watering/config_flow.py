@@ -5,17 +5,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pynetro import NetroClient, NetroConfig, NetroException, NetroInvalidKey
-from pynetro.client import mask
-import voluptuous as vol
-
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from pynetro import NetroClient, NetroConfig, NetroException, NetroInvalidKey
+from pynetro.client import mask
+import voluptuous as vol
 
 from .const import (
     CONF_CTRL_REFRESH_INTERVAL,
@@ -31,10 +30,10 @@ from .const import (
     CONF_SENS_REFRESH_INTERVAL,
     CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
     CONF_SERIAL_NUMBER,
-    CONF_SLOWDOWN_FACTORS,
-    CONF_SLOWDOWN_START_TIME,
     CONF_SLOWDOWN_END_TIME,
+    CONF_SLOWDOWN_FACTORS,
     CONF_SLOWDOWN_MULTIPLIER,
+    CONF_SLOWDOWN_START_TIME,
     CONTROLLER_ADVANCED_OPTIONS_COLLAPSED,
     CONTROLLER_DEVICE_TYPE,
     CTRL_REFRESH_INTERVAL_MN,
@@ -202,7 +201,13 @@ class NetroConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             serial = _normalize_serial(user_input[CONF_SERIAL_NUMBER])
 
-            # 1) Prevent duplicates across device types: compare to the serial stored in data
+            # The serial number identifies the device across controllers and sensors,
+            # so it doubles as the unique id of the config entry.
+            await self.async_set_unique_id(serial)
+            self._abort_if_unique_id_configured()
+
+            # Entries created before unique ids were assigned have none, so also
+            # compare against the serial stored in data.
             for entry in self._async_current_entries():
                 if _normalize_serial(entry.data.get(CONF_SERIAL_NUMBER, "")) == serial:
                     return self.async_abort(reason="already_configured")
@@ -266,13 +271,14 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
         opt = self.config_entry.options
 
         if self.config_entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
-
             # Fallback legacy slowdown_factors from YAML or previous options
             default_sd_start = "22:00"
             default_sd_end = "06:00"
             default_sd_mult = 1
-            
-            old_sd_factors = opt.get(CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS, []))
+
+            old_sd_factors = opt.get(
+                CONF_SLOWDOWN_FACTORS, gp.get(CONF_SLOWDOWN_FACTORS, [])
+            )
             if isinstance(old_sd_factors, list) and len(old_sd_factors) > 0:
                 first_sd = old_sd_factors[0]
                 default_sd_start = first_sd.get("from", default_sd_start)

@@ -153,14 +153,20 @@
               "delay_before_refresh": "Tiempo de espera antes de actualizar los datos (en segundos)",
               "months_after_schedules": "Meses después de hoy para obtener programaciones",
               "months_before_schedules": "Meses antes de hoy para obtener programaciones",
-              "sensor_value_days_before_today": "Días atrás para obtener el valor del sensor"
+              "sensor_value_days_before_today": "Días atrás para obtener el valor del sensor",
+              "slowdown_start_time": "Hora de inicio de la ralentización",
+              "slowdown_end_time": "Hora de fin de la ralentización",
+              "slowdown_multiplier": "Multiplicador del factor de ralentización"
             },
             "data_description": {
               "default_watering_delay": "Retraso definido por el usuario antes de que comience el riego",
               "delay_before_refresh": "Tiempo de espera antes de obtener retroalimentación del estado desde la nube después de una acción (p. ej., iniciar riego)",
               "months_after_schedules": "Número de meses a futuro para incluir en las programaciones",
               "months_before_schedules": "Número de meses en el pasado para incluir en las programaciones",
-              "sensor_value_days_before_today": "Usar datos de días anteriores si el sensor de suelo no se actualiza diariamente"
+              "sensor_value_days_before_today": "Usar datos de días anteriores si el sensor de suelo no se actualiza diariamente",
+              "slowdown_start_time": "Hora a partir de la cual se ralentiza la frecuencia de actualización de datos",
+              "slowdown_end_time": "Hora a partir de la cual la frecuencia de actualización vuelve a la normalidad",
+              "slowdown_multiplier": "Cuántas veces más lenta debe ser la actualización (p. ej. 4 significa actualizar 4 veces más lento)"
             },
             "description": "Consulte la documentación antes de cambiar estas opciones.",
             "name": "Opciones avanzadas"

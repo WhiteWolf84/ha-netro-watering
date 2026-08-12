@@ -153,14 +153,20 @@
               "delay_before_refresh": "Temps d’attente avant l’actualisation des données (en secondes)",
               "months_after_schedules": "Nombre de mois après aujourd’hui pour obtenir les plannings",
               "months_before_schedules": "Nombre de mois avant aujourd’hui pour obtenir les plannings",
-              "sensor_value_days_before_today": "Nombre de jours passés pour récupérer la valeur du capteur"
+              "sensor_value_days_before_today": "Nombre de jours passés pour récupérer la valeur du capteur",
+              "slowdown_start_time": "Heure de début du ralentissement",
+              "slowdown_end_time": "Heure de fin du ralentissement",
+              "slowdown_multiplier": "Multiplicateur du facteur de ralentissement"
             },
             "data_description": {
               "default_watering_delay": "Délai défini par l’utilisateur avant le début de l’arrosage",
               "delay_before_refresh": "Temps d’attente avant de récupérer l’état depuis le cloud après une action (ex. : démarrage de l’arrosage)",
               "months_after_schedules": "Nombre de mois à venir à inclure dans les plannings",
               "months_before_schedules": "Nombre de mois passés à inclure dans les plannings",
-              "sensor_value_days_before_today": "Utiliser les données des jours précédents si le capteur de sol n’est pas mis à jour quotidiennement"
+              "sensor_value_days_before_today": "Utiliser les données des jours précédents si le capteur de sol n’est pas mis à jour quotidiennement",
+              "slowdown_start_time": "Heure à partir de laquelle la fréquence de rafraîchissement des données est ralentie",
+              "slowdown_end_time": "Heure à partir de laquelle la fréquence de rafraîchissement redevient normale",
+              "slowdown_multiplier": "Combien de fois le rafraîchissement doit être plus lent (par ex. 4 signifie un rafraîchissement 4 fois plus lent)"
             },
             "description": "Consultez la documentation avant de modifier ces options",
             "name": "Options avancées"

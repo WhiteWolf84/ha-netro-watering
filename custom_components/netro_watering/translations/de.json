@@ -153,14 +153,20 @@
               "delay_before_refresh": "Wartezeit vor Datenaktualisierung (in Sekunden)",
               "months_after_schedules": "Monate nach heute, um Zeitpläne zu erhalten",
               "months_before_schedules": "Monate vor heute, um Zeitpläne zu erhalten",
-              "sensor_value_days_before_today": "Vor wie vielen Tagen Sensorwert abrufen"
+              "sensor_value_days_before_today": "Vor wie vielen Tagen Sensorwert abrufen",
+              "slowdown_start_time": "Startzeit der Verlangsamung",
+              "slowdown_end_time": "Endzeit der Verlangsamung",
+              "slowdown_multiplier": "Multiplikator des Verlangsamungsfaktors"
             },
             "data_description": {
               "default_watering_delay": "Vom Benutzer definierte Verzögerung vor Beginn der Bewässerung.",
               "delay_before_refresh": "Wartezeit, bevor nach einer Aktion (z. B. Bewässerung starten) eine Statusrückmeldung aus der Cloud abgerufen wird.",
               "months_after_schedules": "Anzahl der zukünftigen Monate, die in die Zeitpläne aufgenommen werden.",
               "months_before_schedules": "Anzahl der vergangenen Monate, die in die Zeitpläne aufgenommen werden.",
-              "sensor_value_days_before_today": "Daten der Vortage verwenden, wenn der Bodensensor nicht täglich aktualisiert wird."
+              "sensor_value_days_before_today": "Daten der Vortage verwenden, wenn der Bodensensor nicht täglich aktualisiert wird.",
+              "slowdown_start_time": "Zeitpunkt, ab dem die Datenaktualisierung verlangsamt wird",
+              "slowdown_end_time": "Zeitpunkt, ab dem die Datenaktualisierung wieder normal läuft",
+              "slowdown_multiplier": "Wie viel langsamer die Datenaktualisierung erfolgen soll (z. B. 4 bedeutet 4-mal langsamer)"
             },
             "description": "Bitte sehen Sie in die Dokumentation, bevor Sie diese Optionen ändern.",
             "name": "Erweiterte Optionen"

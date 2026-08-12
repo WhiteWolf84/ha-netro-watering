@@ -14,7 +14,6 @@ from homeassistant.components.calendar import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,10 +26,8 @@ PARALLEL_UPDATES = 1
 
 NETRO_CALENDAR_DESCRIPTION = CalendarEntityDescription(
     key="schedules",
-    name="Schedules",
     entity_registry_enabled_default=True,
     translation_key="schedules",
-    icon="mdi:calendar-clock",
 )
 
 

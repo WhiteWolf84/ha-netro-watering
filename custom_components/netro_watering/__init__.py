@@ -3,24 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime
 import enum
 import logging
 import re
-from datetime import date, datetime
 
 import aiohttp
-import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import device_registry as dr
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pynetro import NetroClient, NetroConfig
 from pynetro.client import mask
+import voluptuous as vol
 
 from .const import (
     ATTR_CONFIG_ENTRY_ID,
@@ -51,10 +50,10 @@ from .const import (
     CONF_SENS_REFRESH_INTERVAL,
     CONF_SENSOR_VALUE_DAYS_BEFORE_TODAY,
     CONF_SERIAL_NUMBER,
-    CONF_SLOWDOWN_FACTORS,
-    CONF_SLOWDOWN_START_TIME,
     CONF_SLOWDOWN_END_TIME,
+    CONF_SLOWDOWN_FACTORS,
     CONF_SLOWDOWN_MULTIPLIER,
+    CONF_SLOWDOWN_START_TIME,
     CONTROLLER_DEVICE_TYPE,
     CTRL_REFRESH_INTERVAL_MN,
     DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
@@ -310,33 +309,38 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     if config.get(DOMAIN) is not None:
-        _LOGGER.debug("Configuration %s validée: %s", DOMAIN, config.get(DOMAIN))
+        _LOGGER.debug("Configuration %s validated: %s", DOMAIN, config.get(DOMAIN))
     else:
         _LOGGER.debug("No configuration section %s found", DOMAIN)
 
     # access to configuration.yaml
-    if (netro_watering_config := config.get(DOMAIN)) is not None:
-        if netro_watering_config.get(CONF_API_URL) is not None:
-            # URL already validated by CONFIG_SCHEMA via cv.url
-            NetroConfig.default_base_url = netro_watering_config[CONF_API_URL]
-            _LOGGER.info(
-                "Set Netro Public API url to %s",
-                netro_watering_config[CONF_API_URL],
-            )
+    netro_watering_config = config.get(DOMAIN)
+    if (
+        netro_watering_config is not None
+        and (api_url := netro_watering_config.get(CONF_API_URL)) is not None
+    ):
+        # URL already validated by CONFIG_SCHEMA via cv.url
+        NetroConfig.default_base_url = api_url
+        _LOGGER.info("Set Netro Public API url to %s", api_url)
 
     # set global config into the integration shared space
     hass.data[DOMAIN][GLOBAL_PARAMETERS] = netro_watering_config or {}
 
     # prepare slow down factor
-    if hass.data[DOMAIN].get(GLOBAL_PARAMETERS) is not None:
-        if hass.data[DOMAIN][GLOBAL_PARAMETERS].get(CONF_SLOWDOWN_FACTORS) is not None:
-            _LOGGER.debug(
-                "A slowdown factor has been set to %s, preparing it now for use in the integration",
-                hass.data[DOMAIN][GLOBAL_PARAMETERS][CONF_SLOWDOWN_FACTORS],
-            )
-            prepare_slowdown_factors(
-                hass.data[DOMAIN][GLOBAL_PARAMETERS][CONF_SLOWDOWN_FACTORS]
-            )
+    if (
+        slowdown_factors := hass.data[DOMAIN][GLOBAL_PARAMETERS].get(
+            CONF_SLOWDOWN_FACTORS
+        )
+    ) is not None:
+        _LOGGER.debug(
+            "A slowdown factor has been set to %s, preparing it now for use in the integration",
+            slowdown_factors,
+        )
+        prepare_slowdown_factors(slowdown_factors)
+
+    # Register the actions once, up front: they must stay available (and therefore
+    # validatable in automations) even when no config entry is loaded.
+    await _async_register_services(hass)
 
     # Return boolean to indicate that initialization was successful.
     return True
@@ -406,6 +410,7 @@ async def _setup_sensor_coordinator(
 
     coordinator = NetroSensorUpdateCoordinator(
         hass,
+        config_entry=entry,
         refresh_interval=refresh_interval,
         sensor_value_days_before_today=sensor_value_days_before_today,
         serial_number=entry.data[CONF_SERIAL_NUMBER],
@@ -460,6 +465,7 @@ async def _setup_controller_coordinator(
 
     coordinator = NetroControllerUpdateCoordinator(
         hass,
+        config_entry=entry,
         refresh_interval=refresh_interval,
         slowdown_factors=slowdown_factors,
         schedules_months_before=schedules_months_before,
@@ -486,7 +492,7 @@ async def _setup_controller_coordinator(
     )
 
     dev_reg = dr.async_get(hass)
-    dev_reg.async_get_or_create(
+    device_entry = dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, serial)},
         manufacturer=MANUFACTURER,
@@ -495,6 +501,8 @@ async def _setup_controller_coordinator(
         sw_version=coordinator.sw_version,
         hw_version=coordinator.hw_version,
     )
+    # Zones link back to the controller through this id (`via_device` is deprecated).
+    coordinator.device_entry_id = device_entry.id
     _LOGGER.debug(
         "device explicitly created into the registry: name = %s, serial = %s, "
         "model = %s, manufacturer = %s",
@@ -515,6 +523,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> boo
         mask(entry.data[CONF_SERIAL_NUMBER]),
         entry.data[CONF_DEVICE_NAME],
     )
+
+    # Entries created before the config flow assigned unique ids have none; backfill
+    # from the serial number so every entry ends up uniquely identifiable.
+    if entry.unique_id is None:
+        hass.config_entries.async_update_entry(
+            entry, unique_id=str(entry.data[CONF_SERIAL_NUMBER]).strip().upper()
+        )
 
     # access to global parameters
     gp = hass.data.get(DOMAIN, {}).get(GLOBAL_PARAMETERS, {})
@@ -537,117 +552,89 @@ async def async_setup_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> boo
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register services for this entry
-    await _async_register_services(hass, entry)
-
     return True
 
 
-def _register_service_if_not_exists(
-    hass: HomeAssistant,
-    service_name: str,
-    service_function,
-    service_schema,
-) -> None:
-    """Register a service if it doesn't already exist.
+def _async_get_loaded_entry(hass: HomeAssistant, entry_id: str) -> NetroConfigEntry:
+    """Return the loaded Netro config entry ``entry_id``, or explain why we can't.
 
-    This utility function factors out the common pattern of checking if a service
-    exists before registering it, along with logging.
-
-    Args:
-        hass: Home Assistant instance
-        service_name: Name of the service to register
-        service_function: The async function that implements the service
-        service_schema: The voluptuous schema for service validation
+    Services are registered once at integration setup so that automations using them
+    stay valid even when no entry is loaded; the target is therefore validated here,
+    at call time, rather than assumed to exist.
     """
-    if not hass.services.has_service(DOMAIN, service_name):
-        _LOGGER.info("Adding custom service : %s", service_name)
-        hass.services.async_register(
-            DOMAIN,
-            service_name,
-            service_function,
-            schema=service_schema,
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None or entry.domain != DOMAIN:
+        raise ServiceValidationError(f"Config entry id does not exist: {entry_id}")
+    if entry.state is not ConfigEntryState.LOADED:
+        raise ServiceValidationError(
+            f"Config entry '{entry.title}' is not loaded (state: {entry.state})"
         )
+    return entry
 
 
-async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Register Home Assistant services for the Netro Watering integration.
+async def _async_register_services(hass: HomeAssistant) -> None:
+    """Register the Home Assistant services of the Netro Watering integration.
 
-    This function handles the registration of all services related to the integration,
-    including controller-specific services (set_moisture) and global services
-    (report_weather, refresh_data, no_water).
+    Called once from ``async_setup``, so the actions exist -- and automations using
+    them can be validated -- regardless of whether any config entry is loaded.
     """
-    if entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
 
-        async def set_moisture(call: ServiceCall) -> None:
-            moisture = call.data[ATTR_MOISTURE]
+    async def set_moisture(call: ServiceCall) -> None:
+        moisture = call.data[ATTR_MOISTURE]
 
-            # get the device related to the selected zone
-            device_id = call.data[ATTR_ZONE_ID]
-            device_registry = dr.async_get(hass)
-            if (device_entry := device_registry.async_get(device_id)) is None:
-                raise HomeAssistantError(
-                    f"Invalid Netro Watering device ID: {device_id}"
-                )
-            if (
-                device_entry.model is None
-                or device_entry.model != NETRO_DEFAULT_ZONE_MODEL
-            ):
-                raise HomeAssistantError(
-                    f"Invalid Netro Watering device ID: {device_id}, "
-                    "it doesn't seem to be a zone !?"
-                )
-
-            # retrieve the config entry related to this device
-            config_entry = None
-            for entry_id in device_entry.config_entries:
-                if (
-                    candidate := hass.config_entries.async_get_entry(entry_id)
-                ) is None:
-                    continue
-                if candidate.domain == DOMAIN:
-                    config_entry = candidate
-                    break
-            if config_entry is None:
-                raise HomeAssistantError(
-                    f"Cannot find config entry for device ID: {device_id}"
-                )
-
-            # get serial number and zone_id
-            key = config_entry.data[CONF_SERIAL_NUMBER]
-            zone_id = None
-            for identifier in device_entry.identifiers:
-                if identifier[1].startswith(key):
-                    # assume that device info returned by Zone class is
-                    # <controller_serial>_<zone_id> as identifiers
-                    zone_id = identifier[1].rsplit("_", 1)[-1]
-                    if not zone_id.isdigit():
-                        raise HomeAssistantError(
-                            f"Could not extract a zone number from identifier '{identifier[1]}'"
-                        )
-                    break
-            if zone_id is None:
-                raise HomeAssistantError(
-                    f"Cannot find a zone identifier for device ID: {device_id}"
-                )
-
-            # set moisture by Netro
-            _LOGGER.info(
-                "Running custom service 'Set moisture' : the humidity level has been "
-                "forced to %s%% on zone %s (id = %s)",
-                moisture,
-                device_entry.name,
-                zone_id,
+        # get the device related to the selected zone
+        device_id = call.data[ATTR_ZONE_ID]
+        device_registry = dr.async_get(hass)
+        if (device_entry := device_registry.async_get(device_id)) is None:
+            raise ServiceValidationError(
+                f"Invalid Netro Watering device ID: {device_id}"
+            )
+        if device_entry.model is None or device_entry.model != NETRO_DEFAULT_ZONE_MODEL:
+            raise ServiceValidationError(
+                f"Invalid Netro Watering device ID: {device_id}, "
+                "it doesn't seem to be a zone !?"
             )
 
-            session = async_get_clientsession(hass)
-            client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
-            await client.set_moisture(key, moisture=moisture, zones=[zone_id])
+        # retrieve the config entry related to this device
+        config_entry = _async_get_loaded_entry(hass, device_entry.config_entry_id)
 
-        # only one Set moisture service to be created for all controllers
-        _register_service_if_not_exists(
-            hass, SERVICE_SET_MOISTURE_NAME, set_moisture, SERVICE_SET_MOISTURE_SCHEMA
+        # get serial number and zone_id
+        key = config_entry.data[CONF_SERIAL_NUMBER]
+        zone_id = None
+        for identifier in device_entry.identifiers:
+            if identifier[1].startswith(key):
+                # assume that device info returned by Zone class is
+                # <controller_serial>_<zone_id> as identifiers
+                zone_id = identifier[1].rsplit("_", 1)[-1]
+                if not zone_id.isdigit():
+                    raise HomeAssistantError(
+                        f"Could not extract a zone number from identifier '{identifier[1]}'"
+                    )
+                break
+        if zone_id is None:
+            raise HomeAssistantError(
+                f"Cannot find a zone identifier for device ID: {device_id}"
+            )
+
+        # set moisture by Netro
+        _LOGGER.info(
+            "Running custom service 'Set moisture' : the humidity level has been "
+            "forced to %s%% on zone %s (id = %s)",
+            moisture,
+            device_entry.name,
+            zone_id,
         )
+
+        session = async_get_clientsession(hass)
+        client = NetroClient(http=AiohttpClient(session), config=NetroConfig())
+        await client.set_moisture(key, moisture=moisture, zones=[zone_id])
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_MOISTURE_NAME,
+        set_moisture,
+        schema=SERVICE_SET_MOISTURE_SCHEMA,
+    )
 
     async def report_weather(call: ServiceCall) -> None:
         weather_asof: date = call.data[ATTR_WEATHER_DATE]
@@ -663,10 +650,7 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
         weather_pressure = call.data.get(ATTR_WEATHER_PRESSURE)
 
         # get serial number
-        entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-        config_entry = hass.config_entries.async_get_entry(entry_id)
-        if config_entry is None or config_entry.domain != DOMAIN:
-            raise HomeAssistantError(f"Config entry id does not exist: {entry_id}")
+        config_entry = _async_get_loaded_entry(hass, call.data[ATTR_CONFIG_ENTRY_ID])
         coordinator = config_entry.runtime_data
 
         key = coordinator.serial_number
@@ -707,7 +691,9 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
                     key,
                     date=str(weather_asof),
                     condition=(
-                        weather_condition.value if weather_condition is not None else None
+                        weather_condition.value
+                        if weather_condition is not None
+                        else None
                     ),
                     rain=weather_rain,
                     rain_prob=weather_rain_prob,
@@ -733,18 +719,17 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
                 )
                 await asyncio.sleep(10)
 
-    # only one Report weather service to be created for all config entries
-    _register_service_if_not_exists(
-        hass, SERVICE_REPORT_WEATHER_NAME, report_weather, SERVICE_REPORT_WEATHER_SCHEMA
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REPORT_WEATHER_NAME,
+        report_weather,
+        schema=SERVICE_REPORT_WEATHER_SCHEMA,
     )
 
     async def refresh(call: ServiceCall) -> None:
         """Service call to refresh data of Netro devices."""
 
-        entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-        config_entry = hass.config_entries.async_get_entry(entry_id)
-        if config_entry is None or config_entry.domain != DOMAIN:
-            raise HomeAssistantError(f"Config entry id does not exist: {entry_id}")
+        config_entry = _async_get_loaded_entry(hass, call.data[ATTR_CONFIG_ENTRY_ID])
         coordinator: DataUpdateCoordinator = config_entry.runtime_data
 
         _LOGGER.info(
@@ -753,18 +738,14 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
 
         await coordinator.async_request_refresh()
 
-    # only one Refresh data service to be created for all config entry
-    _register_service_if_not_exists(
-        hass, SERVICE_REFRESH_NAME, refresh, SERVICE_REFRESH_SCHEMA
+    hass.services.async_register(
+        DOMAIN, SERVICE_REFRESH_NAME, refresh, schema=SERVICE_REFRESH_SCHEMA
     )
 
     async def nowater(call: ServiceCall) -> None:
         """Service call to stop watering for a given number of days."""
 
-        entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-        config_entry = hass.config_entries.async_get_entry(entry_id)
-        if config_entry is None or config_entry.domain != DOMAIN:
-            raise HomeAssistantError(f"Config entry id does not exist: {entry_id}")
+        config_entry = _async_get_loaded_entry(hass, call.data[ATTR_CONFIG_ENTRY_ID])
         coordinator: DataUpdateCoordinator = config_entry.runtime_data
 
         _LOGGER.info(
@@ -777,51 +758,22 @@ async def _async_register_services(hass: HomeAssistant, entry: ConfigEntry) -> N
         await coordinator.no_water(int(days))
         await coordinator.async_request_refresh()
 
-    # only one nowater data service to be created for all config entry
-    _register_service_if_not_exists(
-        hass, SERVICE_NO_WATER_NAME, nowater, SERVICE_NO_WATER_SCHEMA
+    hass.services.async_register(
+        DOMAIN, SERVICE_NO_WATER_NAME, nowater, schema=SERVICE_NO_WATER_SCHEMA
     )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: NetroConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry.
+
+    Services are owned by the integration, not by the entry (they are registered in
+    ``async_setup``), so they deliberately survive an unload: automations referring
+    to them stay valid and the call itself reports which entry is unavailable.
+    """
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         _LOGGER.info("Unloaded config entry: %s", entry.runtime_data)
-
-        # Only remove services if platform unload succeeded
-        # the Set moisture service has to be removed if the current entry is a controller
-        # and the last one
-        if entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE:
-            other_loaded_entries = [
-                _entry
-                for _entry in hass.config_entries.async_loaded_entries(DOMAIN)
-                if _entry.entry_id != entry.entry_id
-                and _entry.data[CONF_DEVICE_TYPE] == CONTROLLER_DEVICE_TYPE
-            ]
-
-            if not other_loaded_entries:
-                _LOGGER.info("Removing service %s", SERVICE_SET_MOISTURE_NAME)
-                hass.services.async_remove(DOMAIN, SERVICE_SET_MOISTURE_NAME)
-
-        # if there is no more entry after this one, one must remove the config entry level services
-        other_loaded_entries = [
-            _entry
-            for _entry in hass.config_entries.async_loaded_entries(DOMAIN)
-            if _entry.entry_id != entry.entry_id
-        ]
-
-        if not other_loaded_entries:
-            _LOGGER.info("Removing service %s", SERVICE_REPORT_WEATHER_NAME)
-            hass.services.async_remove(DOMAIN, SERVICE_REPORT_WEATHER_NAME)
-            _LOGGER.info("Removing service %s", SERVICE_REFRESH_NAME)
-            hass.services.async_remove(DOMAIN, SERVICE_REFRESH_NAME)
-            _LOGGER.info("Removing service %s", SERVICE_NO_WATER_NAME)
-            hass.services.async_remove(DOMAIN, SERVICE_NO_WATER_NAME)
     else:
-        _LOGGER.warning(
-            "Failed to unload platforms for entry %s, keeping services active",
-            entry.entry_id,
-        )
+        _LOGGER.warning("Failed to unload platforms for entry %s", entry.entry_id)
 
     return unload_ok

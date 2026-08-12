@@ -2,11 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UNDEFINED
+import pytest
 
 from custom_components.netro_watering.const import (
     CONF_DEVICE_TYPE,
@@ -199,7 +200,9 @@ class TestSensorAsyncSetupEntry:
         mock_async_add_entities,
     ):
         """Test async_setup_entry for controller device with battery."""
-        mock_config_entry_controller.runtime_data = mock_controller_coordinator_with_battery
+        mock_config_entry_controller.runtime_data = (
+            mock_controller_coordinator_with_battery
+        )
 
         # Call the function
         await async_setup_entry(
@@ -261,7 +264,7 @@ class TestSensorEntityDescriptions:
             "battery_percent",
             "token_remaining",
         ]
-        assert NETRO_SENSOR_DESCRIPTIONS_KEYS == expected_keys
+        assert expected_keys == NETRO_SENSOR_DESCRIPTIONS_KEYS
 
     def test_netro_controller_descriptions_count(self):
         """Test that NETRO_CONTROLLER_DESCRIPTIONS has expected count."""
@@ -270,7 +273,7 @@ class TestSensorEntityDescriptions:
     def test_netro_controller_descriptions_keys(self):
         """Test NETRO_CONTROLLER_DESCRIPTIONS_KEYS matches descriptions."""
         expected_keys = ["status", "token_remaining"]
-        assert NETRO_CONTROLLER_DESCRIPTIONS_KEYS == expected_keys
+        assert expected_keys == NETRO_CONTROLLER_DESCRIPTIONS_KEYS
 
     def test_netro_zone_descriptions_count(self):
         """Test that NETRO_ZONE_DESCRIPTIONS has expected count."""
@@ -289,13 +292,13 @@ class TestSensorEntityDescriptions:
             "next_watering_source",
             "humidity",
         ]
-        assert NETRO_ZONE_DESCRIPTIONS_KEYS == expected_keys
+        assert expected_keys == NETRO_ZONE_DESCRIPTIONS_KEYS
 
     def test_netro_controller_battery_description_properties(self):
         """Test NETRO_CONTROLLER_BATTERY_DESCRIPTION properties."""
         desc = NETRO_CONTROLLER_BATTERY_DESCRIPTION
         assert desc.key == "battery_percent"
-        assert desc.name == "Battery Percent"
+        assert desc.name is UNDEFINED
         assert desc.device_class == SensorDeviceClass.BATTERY
         assert desc.translation_key == "battery_percent"
 

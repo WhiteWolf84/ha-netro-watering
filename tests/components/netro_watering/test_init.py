@@ -2,10 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 from pynetro import NetroConfig
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 # Import constants directly from the const module
@@ -79,8 +79,10 @@ async def test_async_setup_without_netro_api_url(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_async_setup_without_domain_config(hass: HomeAssistant) -> None:
-    """Test async_setup without domain configuration
-    does not modify NetroConfig.default_base_url."""
+    """Test async_setup without domain configuration.
+
+    It must not modify NetroConfig.default_base_url.
+    """
     config: ConfigType = {}
 
     # ✅ Use INTEGRATION_PATH instead of hardcoded path
@@ -184,6 +186,7 @@ async def test_setup_sensor_device_success(
         # Verify that the coordinator was created with the correct parameters
         mock_coordinator_class.assert_called_once_with(
             hass,
+            config_entry=mock_sensor_config_entry,
             refresh_interval=SENS_REFRESH_INTERVAL_MN,
             sensor_value_days_before_today=DEFAULT_SENSOR_VALUE_DAYS_BEFORE_TODAY,
             serial_number="SENSOR123",
@@ -205,10 +208,9 @@ async def test_setup_sensor_device_success(
             PLATFORMS,
         )
 
-        # Verify that services were registered
-        assert (
-            mock_register_service.call_count >= 2
-        )  # At least refresh and report_weather
+        # Actions belong to async_setup, not to the entry: setting an entry up
+        # must not register anything (see the `action-setup` quality-scale rule).
+        mock_register_service.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -241,6 +243,7 @@ async def test_setup_sensor_device_with_custom_options(
         # Verify that the coordinator was created with the correct parameters
         mock_coordinator_class.assert_called_once_with(
             hass,
+            config_entry=mock_sensor_config_entry_with_options,
             refresh_interval=30,
             sensor_value_days_before_today=3,
             serial_number="SENSOR456",
@@ -254,7 +257,10 @@ async def test_setup_sensor_device_with_custom_options(
         mock_coordinator_instance.async_config_entry_first_refresh.assert_called_once()
 
         # Verify that the coordinator was stored in runtime_data
-        assert mock_sensor_config_entry_with_options.runtime_data == mock_coordinator_instance
+        assert (
+            mock_sensor_config_entry_with_options.runtime_data
+            == mock_coordinator_instance
+        )
 
         # Verify that platforms were configured
         mock_forward.assert_called_once_with(
@@ -262,10 +268,9 @@ async def test_setup_sensor_device_with_custom_options(
             PLATFORMS,
         )
 
-        # Verify that services were registered
-        assert (
-            mock_register_service.call_count >= 2
-        )  # At least refresh and report_weather
+        # Actions belong to async_setup, not to the entry: setting an entry up
+        # must not register anything (see the `action-setup` quality-scale rule).
+        mock_register_service.assert_not_called()
 
 
 # TODOs:

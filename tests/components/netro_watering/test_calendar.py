@@ -3,12 +3,13 @@
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.components.calendar import CalendarEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UNDEFINED
+import pytest
 
 from custom_components.netro_watering.calendar import (
     NETRO_CALENDAR_DESCRIPTION,
@@ -159,10 +160,10 @@ class TestCalendarAsyncSetupEntry:
     async def test_calendar_entity_description_properties(self):
         """Test that NETRO_CALENDAR_DESCRIPTION has correct properties."""
         assert NETRO_CALENDAR_DESCRIPTION.key == "schedules"
-        assert NETRO_CALENDAR_DESCRIPTION.name == "Schedules"
+        assert NETRO_CALENDAR_DESCRIPTION.name is UNDEFINED
         assert NETRO_CALENDAR_DESCRIPTION.entity_registry_enabled_default is True
         assert NETRO_CALENDAR_DESCRIPTION.translation_key == "schedules"
-        assert NETRO_CALENDAR_DESCRIPTION.icon == "mdi:calendar-clock"
+        assert NETRO_CALENDAR_DESCRIPTION.icon is None
 
 
 class TestNetroCalendar:
@@ -212,8 +213,8 @@ class TestNetroCalendar:
     ):
         """Test event property when current schedule exists."""
         # Use timezone-aware datetime objects
-        start_time = datetime.datetime(2023, 10, 1, 6, 0, tzinfo=datetime.timezone.utc)
-        end_time = datetime.datetime(2023, 10, 1, 6, 30, tzinfo=datetime.timezone.utc)
+        start_time = datetime.datetime(2023, 10, 1, 6, 0, tzinfo=datetime.UTC)
+        end_time = datetime.datetime(2023, 10, 1, 6, 30, tzinfo=datetime.UTC)
 
         test_schedule = {
             "start": start_time,
@@ -256,22 +257,14 @@ class TestNetroCalendar:
         # Use timezone-aware datetime objects
         test_schedules = [
             {
-                "start": datetime.datetime(
-                    2023, 10, 1, 6, 0, tzinfo=datetime.timezone.utc
-                ),
-                "end": datetime.datetime(
-                    2023, 10, 1, 6, 30, tzinfo=datetime.timezone.utc
-                ),
+                "start": datetime.datetime(2023, 10, 1, 6, 0, tzinfo=datetime.UTC),
+                "end": datetime.datetime(2023, 10, 1, 6, 30, tzinfo=datetime.UTC),
                 "summary": "Zone 1 Watering",
                 "description": "Scheduled watering for Zone 1",
             },
             {
-                "start": datetime.datetime(
-                    2023, 10, 2, 7, 0, tzinfo=datetime.timezone.utc
-                ),
-                "end": datetime.datetime(
-                    2023, 10, 2, 7, 15, tzinfo=datetime.timezone.utc
-                ),
+                "start": datetime.datetime(2023, 10, 2, 7, 0, tzinfo=datetime.UTC),
+                "end": datetime.datetime(2023, 10, 2, 7, 15, tzinfo=datetime.UTC),
                 "summary": "Zone 2 Watering",
                 "description": "Scheduled watering for Zone 2",
             },

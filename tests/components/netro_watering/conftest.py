@@ -2,9 +2,9 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest  # noqa: E402 # pylint: disable=wrong-import-position
-from pytest_homeassistant_custom_component.common import (  # noqa: E402 # pylint: disable=wrong-import-position
-    MockConfigEntry,  # noqa: E402 # pylint: disable=wrong-import-position
+import pytest  # pylint: disable=wrong-import-position
+from pytest_homeassistant_custom_component.common import (  # pylint: disable=wrong-import-position
+    MockConfigEntry,  # pylint: disable=wrong-import-position
 )
 
 # Conditional import
@@ -45,7 +45,7 @@ except ImportError:
 
     INTEGRATION_PATCH_PATH = "custom_components.netro_watering"
 
-from pynetro.client import (  # noqa: E402 # pylint: disable=wrong-import-position
+from pynetro.client import (  # pylint: disable=wrong-import-position
     NETRO_ERROR_CODE_EXCEED_LIMIT,
     NETRO_ERROR_CODE_INTERNAL_ERROR,
     NETRO_ERROR_CODE_INVALID_DEVICE,
@@ -321,6 +321,6 @@ def mock_netro_controller_coordinator():
         coordinator.sw_version = "1.0.0"
         coordinator.hw_version = "1.0.0"
         # Simulate attribute to determine controller type
-        setattr(coordinator, "NETRO_CONTROLLER_BATTERY_LEVEL", True)
+        coordinator.NETRO_CONTROLLER_BATTERY_LEVEL = True
         mock_class.return_value = coordinator
         yield mock_class, coordinator
