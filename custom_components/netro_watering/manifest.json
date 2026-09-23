@@ -11,5 +11,5 @@
   "loggers": ["pynetro"],
   "quality_scale": "silver",
   "requirements": ["pynetro==0.1.5"],
-  "version": "2.2.0-beta.1"
+  "version": "2.2.0"
 }
